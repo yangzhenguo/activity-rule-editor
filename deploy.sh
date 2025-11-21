@@ -28,52 +28,30 @@ fi
 echo "✓ 后端依赖已更新"
 echo ""
 
-# 构建前端
-echo "[2/3] 构建前端..."
-cd web
-
-# 加载 nvm（如果存在）
-if [ -s "$HOME/.nvm/nvm.sh" ]; then
-    source "$HOME/.nvm/nvm.sh"
-    echo "✓ 已加载 nvm 环境"
-elif [ -s "/usr/local/opt/nvm/nvm.sh" ]; then
-    source "/usr/local/opt/nvm/nvm.sh"
-    echo "✓ 已加载 nvm 环境"
-fi
-
-# 检查 Node.js
-if ! command -v node &> /dev/null; then
-    echo "错误: 未找到 Node.js，请先安装 nvm 和 Node.js"
-    echo "安装方法: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash"
-    exit 1
-fi
-
-if [ -z "$VITE_API_BASE" ]; then
-    export VITE_API_BASE=""
-    echo "提示: 使用默认 API 地址（相对路径，与后端同域）"
-    echo "如需自定义，请设置环境变量: export VITE_API_BASE='https://api.example.com'"
-fi
-
-# 检查 pnpm
-if ! command -v pnpm &> /dev/null; then
-    echo "错误: 未找到 pnpm，请先安装 pnpm"
-    echo "安装方法: npm install -g pnpm"
-    exit 1
-fi
-
-echo "使用 Node.js: $(node --version)"
-echo "使用 pnpm: $(pnpm --version)"
-pnpm install
-pnpm build
-cd ..
-echo "✓ 前端构建完成"
-echo ""
-
-# 检查静态文件目录
+# 检查前端静态文件
+echo "[2/3] 检查前端静态文件..."
 if [ ! -d "web/dist" ]; then
-    echo "错误: 前端构建失败，web/dist 目录不存在"
+    echo "错误: web/dist 目录不存在"
+    echo ""
+    echo "请先在本地构建前端:"
+    echo "  cd web"
+    echo "  pnpm install"
+    echo "  pnpm build"
+    echo "  cd .."
+    echo ""
+    echo "然后提交构建后的 web/dist/ 目录到版本控制"
     exit 1
 fi
+
+# 检查 dist 目录是否为空
+if [ -z "$(ls -A web/dist)" ]; then
+    echo "错误: web/dist 目录为空"
+    echo "请先在本地构建前端"
+    exit 1
+fi
+
+echo "✓ 前端静态文件已就绪 (web/dist/)"
+echo ""
 
 # 重启服务（如果 supervisor 服务存在）
 echo "[3/3] 检查服务状态..."

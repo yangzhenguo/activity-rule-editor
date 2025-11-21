@@ -22,10 +22,16 @@ FastAPI (Gunicorn + Uvicorn) - 统一服务
 
 ## 前置要求
 
+**服务器要求：**
 - Linux 服务器（Ubuntu 20.04+ / CentOS 7+）
 - Python 3.8+
-- Node.js 16+ 和 pnpm
-- 域名（可选，用于 HTTPS）
+- Supervisor（进程管理）
+
+**本地开发环境要求：**
+- Node.js 16+ 和 pnpm（用于构建前端）
+- Python 3.8+ 和 uv（用于开发后端）
+
+**注意：** 前端在本地构建，服务器上不需要 Node.js 和 pnpm。
 
 ## 1. 服务器准备
 
@@ -110,27 +116,32 @@ uv sync --extra production
 
 这会安装所有依赖，包括 Gunicorn（生产级 WSGI 服务器）。
 
-### 2.3 构建前端
+### 2.3 前端静态文件
 
+**重要：** 前端需要在本地开发环境构建，构建后的静态文件会提交到版本控制。
+
+**本地构建前端：**
 ```bash
-cd /opt/activity-rule-editor/web
-
-# 加载 nvm 环境（如果使用 nvm）
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-nvm use 18  # 或使用已安装的 Node.js 版本
-
-# 设置生产环境 API 地址（留空表示使用相对路径，与后端同域）
-export VITE_API_BASE=""
-
-# 构建
+cd web
 pnpm install
-pnpm build
+pnpm build  # 构建生产版本，生成 web/dist/ 目录
 ```
 
-构建完成后，静态文件会在 `web/dist/` 目录，FastAPI 会自动提供这些文件。
+构建完成后，`web/dist/` 目录会被提交到版本控制。
 
-**注意：** 如果是在脚本中运行，确保 nvm 环境已正确加载。
+**部署时检查：**
+```bash
+# 检查静态文件是否存在
+ls -la /opt/activity-rule-editor/web/dist/
+
+# 如果不存在，说明需要先拉取包含构建文件的代码
+```
+
+FastAPI 会自动提供 `web/dist/` 目录中的静态文件。
+
+**注意：**
+- 前端构建在本地完成，服务器上不需要 Node.js 和 pnpm
+- 如果 `web/dist/` 目录不存在，部署脚本会提示错误
 
 ### 2.4 安装 Supervisor
 
@@ -352,21 +363,26 @@ sudo tail -f /var/log/activity-rule-editor/error.log
 ```bash
 cd /opt/activity-rule-editor
 
-# 拉取最新代码
+# 拉取最新代码（包含已构建的前端静态文件）
 git pull  # 或上传新文件
 
 # 更新后端依赖
 uv sync --extra production
 
-# 重新构建前端
-cd web
-pnpm install
-pnpm build
-cd ..
+# 检查前端静态文件（应该已经包含在代码中）
+if [ ! -d "web/dist" ]; then
+    echo "警告: web/dist 目录不存在，请确保本地已构建前端并提交"
+fi
 
 # 重启服务
 sudo supervisorctl restart activity-rule-editor
 ```
+
+**前端更新流程：**
+1. 在本地修改前端代码
+2. 本地构建：`cd web && pnpm build`
+3. 提交构建后的 `web/dist/` 目录到版本控制
+4. 在服务器上拉取代码并重启服务
 
 ### 6.3 使用部署脚本
 
@@ -476,17 +492,22 @@ sudo ss -tlnp | grep 8000
 
 ## 10. 快速部署检查清单
 
+**服务器端：**
 - [ ] 安装 Python 3.8+ 和 uv
-- [ ] 安装 Node.js 和 pnpm
-- [ ] 克隆/上传项目到服务器
+- [ ] 安装 Supervisor
+- [ ] 克隆/上传项目到服务器（包含已构建的 `web/dist/` 目录）
 - [ ] 运行 `uv sync --extra production`
-- [ ] 运行 `cd web && pnpm install && pnpm build`
-- [ ] 安装 supervisor：`sudo apt install supervisor`
+- [ ] 检查 `web/dist/` 目录是否存在
 - [ ] 配置 supervisor：`sudo cp scripts/activity-rule-editor.ini /etc/supervisord.d/activity-rule-editor.ini`
 - [ ] 创建日志目录并设置权限
 - [ ] 启动服务：`sudo supervisorctl start activity-rule-editor`
 - [ ] 配置防火墙开放端口
 - [ ] （可选）配置 HTTPS
+
+**本地开发环境（用于构建前端）：**
+- [ ] 安装 Node.js 16+ 和 pnpm
+- [ ] 运行 `cd web && pnpm install && pnpm build`
+- [ ] 提交构建后的 `web/dist/` 目录到版本控制
 
 ## 11. 部署架构对比
 

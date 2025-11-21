@@ -6,7 +6,7 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
+/dist/
 downloads/
 eggs/
 .eggs/
@@ -51,7 +51,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # Build outputs
-dist/
+# 注意: web/dist/ 目录需要提交，因为部署时使用本地构建的静态文件
+# /dist/
 dist-ssr/
 *.local
 

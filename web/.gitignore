@@ -8,7 +8,8 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
-dist
+# 注意: dist 目录需要提交，因为部署时使用本地构建的静态文件
+# dist
 dist-ssr
 *.local
 

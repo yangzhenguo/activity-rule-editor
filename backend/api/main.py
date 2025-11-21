@@ -131,9 +131,18 @@ if STATIC_DIR.exists():
     # 使用 StaticFiles 挂载整个 dist 目录，但排除 index.html（由 SPA 路由处理）
     @app.get("/favicon.ico")
     async def favicon():
+        # 首先尝试根目录的 favicon.ico
         favicon_path = STATIC_DIR / "favicon.ico"
         if favicon_path.exists():
             return FileResponse(favicon_path)
+
+        # 如果不存在，查找 assets 目录中带哈希的 favicon 文件
+        assets_dir = STATIC_DIR / "assets"
+        if assets_dir.exists():
+            # 查找所有以 favicon 开头的 .ico 文件
+            for favicon_file in assets_dir.glob("favicon*.ico"):
+                return FileResponse(favicon_file)
+
         return JSONResponse({"error": "not found"}, status_code=404)
 
     @app.get("/vite.svg")
