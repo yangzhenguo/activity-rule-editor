@@ -192,11 +192,40 @@ sudo iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 8000
 
 方法 3：修改 supervisor 配置以 root 运行（不推荐，安全性较低）
 
-### 2.6 创建日志目录
+### 2.6 设置权限
+
+**创建日志目录并设置权限：**
 
 ```bash
 sudo mkdir -p /var/log/activity-rule-editor
-sudo chown www-data:www-data /var/log/activity-rule-editor
+# 根据 supervisor 配置中的用户设置权限（例如：dev 或 www-data）
+sudo chown dev:dev /var/log/activity-rule-editor
+# 或
+# sudo chown www-data:www-data /var/log/activity-rule-editor
+```
+
+**确保项目目录权限正确：**
+
+```bash
+# 检查项目目录权限
+ls -la /opt/activity-rule-editor
+
+# 确保运行用户有权限访问项目目录
+# 如果用户是 dev，确保 dev 用户可以访问项目目录
+sudo chown -R dev:dev /opt/activity-rule-editor
+# 或根据实际情况调整
+
+# 确保虚拟环境可执行
+chmod +x /opt/activity-rule-editor/.venv/bin/gunicorn
+chmod +x /opt/activity-rule-editor/.venv/bin/python
+```
+
+**验证权限：**
+
+```bash
+# 切换到运行用户，测试是否可以访问
+sudo -u dev ls /opt/activity-rule-editor
+sudo -u dev /opt/activity-rule-editor/.venv/bin/python --version
 ```
 
 ### 2.7 启动服务
@@ -454,6 +483,41 @@ FastAPI 默认没有文件大小限制，但建议在代码中或通过环境变
 
 ### 服务无法启动
 
+**错误：EACCES (权限错误)**
+
+如果看到 `EACCES` 错误，通常是权限问题：
+
+```bash
+# 1. 检查 supervisor 配置中的用户
+grep "^user=" /etc/supervisord.d/activity-rule-editor.ini
+
+# 2. 检查项目目录权限
+ls -la /opt/activity-rule-editor
+
+# 3. 检查虚拟环境是否存在
+ls -la /opt/activity-rule-editor/.venv/bin/gunicorn
+
+# 4. 检查日志目录权限
+ls -la /var/log/activity-rule-editor
+
+# 5. 修复权限（假设用户是 dev）
+sudo chown -R dev:dev /opt/activity-rule-editor
+sudo chown dev:dev /var/log/activity-rule-editor
+chmod +x /opt/activity-rule-editor/.venv/bin/gunicorn
+chmod +x /opt/activity-rule-editor/.venv/bin/python
+
+# 6. 测试用户是否可以访问
+sudo -u dev ls /opt/activity-rule-editor
+sudo -u dev /opt/activity-rule-editor/.venv/bin/python --version
+
+# 7. 重新加载并启动
+sudo supervisorctl reread
+sudo supervisorctl update
+sudo supervisorctl start activity-rule-editor
+```
+
+**其他排查步骤：**
+
 ```bash
 # 检查服务状态
 sudo supervisorctl status activity-rule-editor
@@ -464,9 +528,8 @@ sudo supervisorctl tail -f activity-rule-editor
 # 查看 supervisor 主日志
 sudo tail -f /var/log/supervisor/supervisord.log
 
-# 手动测试启动
-cd /opt/activity-rule-editor
-uv run gunicorn -w 1 -k uvicorn.workers.UvicornWorker backend.api.main:app --bind 0.0.0.0:8000
+# 手动测试启动（使用配置中的用户）
+sudo -u dev cd /opt/activity-rule-editor && /opt/activity-rule-editor/.venv/bin/gunicorn -w 1 -k uvicorn.workers.UvicornWorker backend.api.main:app --bind 0.0.0.0:8000
 ```
 
 ### 静态文件无法访问
