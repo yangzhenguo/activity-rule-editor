@@ -5,7 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: "./",
+  base: "/activity-rule-editor/",
   plugins: [react(), tsconfigPaths(), tailwindcss()],
   server: {
     allowedHosts: [
