@@ -31,19 +31,40 @@ echo ""
 # 构建前端
 echo "[2/3] 构建前端..."
 cd web
+
+# 加载 nvm（如果存在）
+if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    source "$HOME/.nvm/nvm.sh"
+    echo "✓ 已加载 nvm 环境"
+elif [ -s "/usr/local/opt/nvm/nvm.sh" ]; then
+    source "/usr/local/opt/nvm/nvm.sh"
+    echo "✓ 已加载 nvm 环境"
+fi
+
+# 检查 Node.js
+if ! command -v node &> /dev/null; then
+    echo "错误: 未找到 Node.js，请先安装 nvm 和 Node.js"
+    echo "安装方法: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash"
+    exit 1
+fi
+
 if [ -z "$VITE_API_BASE" ]; then
     export VITE_API_BASE=""
     echo "提示: 使用默认 API 地址（相对路径，与后端同域）"
     echo "如需自定义，请设置环境变量: export VITE_API_BASE='https://api.example.com'"
 fi
 
-if command -v pnpm &> /dev/null; then
-    pnpm install
-    pnpm build
-else
+# 检查 pnpm
+if ! command -v pnpm &> /dev/null; then
     echo "错误: 未找到 pnpm，请先安装 pnpm"
+    echo "安装方法: npm install -g pnpm"
     exit 1
 fi
+
+echo "使用 Node.js: $(node --version)"
+echo "使用 pnpm: $(pnpm --version)"
+pnpm install
+pnpm build
 cd ..
 echo "✓ 前端构建完成"
 echo ""
@@ -62,7 +83,7 @@ if sudo supervisorctl status activity-rule-editor >/dev/null 2>&1; then
     echo "✓ 服务已重启"
 else
     echo "提示: supervisor 服务未配置，请手动配置:"
-    echo "  sudo cp scripts/supervisor.conf /etc/supervisor/conf.d/activity-rule-editor.conf"
+    echo "  sudo cp scripts/activity-rule-editor.ini /etc/supervisord.d/activity-rule-editor.ini"
     echo "  sudo supervisorctl reread"
     echo "  sudo supervisorctl update"
     echo "  sudo supervisorctl start activity-rule-editor"

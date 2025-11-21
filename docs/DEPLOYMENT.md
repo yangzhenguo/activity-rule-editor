@@ -50,15 +50,40 @@ pip3 install uv
 
 ### 1.3 安装 Node.js 和 pnpm
 
+**使用 nvm 管理 Node.js（推荐）：**
+
 ```bash
-# 安装 Node.js (使用 nvm 推荐)
+# 安装 nvm
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
+
+# 重新加载 shell 配置
 source ~/.bashrc
+# 或
+source ~/.zshrc
+
+# 安装 Node.js LTS 版本
 nvm install 18
 nvm use 18
+nvm alias default 18  # 设置默认版本
 
 # 安装 pnpm
 npm install -g pnpm
+```
+
+**验证安装：**
+
+```bash
+node --version  # 应显示 v18.x.x
+npm --version   # 应显示版本号
+pnpm --version  # 应显示版本号
+```
+
+**注意：** 如果使用非交互式 shell（如脚本中），需要先加载 nvm：
+```bash
+source ~/.nvm/nvm.sh
+# 或
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 ```
 
 ## 2. 部署应用
@@ -90,6 +115,11 @@ uv sync --extra production
 ```bash
 cd /opt/activity-rule-editor/web
 
+# 加载 nvm 环境（如果使用 nvm）
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+nvm use 18  # 或使用已安装的 Node.js 版本
+
 # 设置生产环境 API 地址（留空表示使用相对路径，与后端同域）
 export VITE_API_BASE=""
 
@@ -99,6 +129,8 @@ pnpm build
 ```
 
 构建完成后，静态文件会在 `web/dist/` 目录，FastAPI 会自动提供这些文件。
+
+**注意：** 如果是在脚本中运行，确保 nvm 环境已正确加载。
 
 ### 2.4 安装 Supervisor
 
@@ -117,13 +149,13 @@ sudo yum install -y supervisor
 复制配置文件模板：
 
 ```bash
-sudo cp scripts/supervisor.conf /etc/supervisor/conf.d/activity-rule-editor.conf
+sudo cp scripts/activity-rule-editor.ini /etc/supervisord.d/activity-rule-editor.ini
 ```
 
 编辑配置文件，根据实际情况调整：
 
 ```bash
-sudo nano /etc/supervisor/conf.d/activity-rule-editor.conf
+sudo nano /etc/supervisord.d/activity-rule-editor.ini
 ```
 
 **重要配置项：**
@@ -278,7 +310,7 @@ server {
 如果需要配置环境变量，编辑 supervisor 配置文件：
 
 ```bash
-sudo nano /etc/supervisor/conf.d/activity-rule-editor.conf
+sudo nano /etc/supervisord.d/activity-rule-editor.ini
 ```
 
 在 `[program:activity-rule-editor]` 部分添加或修改 `environment` 行：
@@ -359,7 +391,7 @@ command=... -w 4 ...
 编辑 supervisor 配置文件：
 
 ```bash
-sudo nano /etc/supervisor/conf.d/activity-rule-editor.conf
+sudo nano /etc/supervisord.d/activity-rule-editor.ini
 ```
 
 ### 7.2 调整超时时间
@@ -373,7 +405,7 @@ command=... --timeout 300 ...
 编辑 supervisor 配置文件：
 
 ```bash
-sudo nano /etc/supervisor/conf.d/activity-rule-editor.conf
+sudo nano /etc/supervisord.d/activity-rule-editor.ini
 sudo supervisorctl reread
 sudo supervisorctl update
 sudo supervisorctl restart activity-rule-editor
@@ -450,7 +482,7 @@ sudo ss -tlnp | grep 8000
 - [ ] 运行 `uv sync --extra production`
 - [ ] 运行 `cd web && pnpm install && pnpm build`
 - [ ] 安装 supervisor：`sudo apt install supervisor`
-- [ ] 配置 supervisor：`sudo cp scripts/supervisor.conf /etc/supervisor/conf.d/activity-rule-editor.conf`
+- [ ] 配置 supervisor：`sudo cp scripts/activity-rule-editor.ini /etc/supervisord.d/activity-rule-editor.ini`
 - [ ] 创建日志目录并设置权限
 - [ ] 启动服务：`sudo supervisorctl start activity-rule-editor`
 - [ ] 配置防火墙开放端口
