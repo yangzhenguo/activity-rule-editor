@@ -65,7 +65,11 @@ function RewardItem({
   width,
   style,
   direction = "ltr",
+  forExport = false,
   onHeightMeasured,
+  onTextClick,
+  onImageClick,
+  rewardPath,
 }: {
   reward: Reward;
   x: number;
@@ -73,11 +77,16 @@ function RewardItem({
   width: number;
   style: StyleCfg;
   direction?: "rtl" | "ltr";
+  forExport?: boolean;
   onHeightMeasured?: (h: number) => void;
+  onTextClick?: (field: 'name' | 'desc', value: string, pos: {x: number, y: number, width: number, height: number}) => void;
+  onImageClick?: () => void;
+  rewardPath?: string;
 }) {
   const [rewardImg, setRewardImg] = useState<CanvasImageSource | null>(null);
   const nameRef = useRef<Konva.Text>(null);
   const descRef = useRef<Konva.Text>(null);
+  const [hoveredPart, setHoveredPart] = useState<'image' | 'name' | 'desc' | null>(null);
 
   useEffect(() => {
     if (!reward.image) {
@@ -164,47 +173,128 @@ function RewardItem({
     <Group x={x} y={y}>
       {/* 奖励图片 - 在容器内垂直和水平居中，长边贴边 */}
       {rewardImg && (
-        <KImage
-          height={displayImgH}
-          image={rewardImg as any}
-          width={displayImgW}
-          x={(width - imgBoxSize) / 2 + imgOffsetX}
-          y={imgPadding + imgOffsetY}
-        />
+        <>
+          <KImage
+            height={displayImgH}
+            image={rewardImg as any}
+            width={displayImgW}
+            x={(width - imgBoxSize) / 2 + imgOffsetX}
+            y={imgPadding + imgOffsetY}
+            listening={!forExport}
+            onMouseEnter={() => !forExport && setHoveredPart('image')}
+            onMouseLeave={() => !forExport && setHoveredPart(null)}
+            onClick={() => {
+              if (!forExport && onImageClick) {
+                onImageClick();
+              }
+            }}
+          />
+          {/* 图片悬浮边框 */}
+          {!forExport && hoveredPart === 'image' && (
+            <Rect
+              x={(width - imgBoxSize) / 2 - 4}
+              y={imgPadding - 4}
+              width={imgBoxSize + 8}
+              height={imgBoxSize + 8}
+              stroke="#ff3333"
+              strokeWidth={2}
+              dash={[5, 5]}
+              listening={false}
+            />
+          )}
+        </>
       )}
 
       {/* 奖励名称（标题，加粗，在列宽内水平居中） */}
       {reward.name && (
-        <Text
-          ref={nameRef}
-          align="center"
-          direction={direction}
-          fill={style.titleColor}
-          fontFamily={style.font.family}
-          fontSize={style.font.size}
-          fontStyle="bold"
-          text={reward.name}
-          width={width}
-          x={0}
-          y={textStartY}
-        />
+        <>
+          <Text
+            ref={nameRef}
+            align="center"
+            direction={direction}
+            fill={style.titleColor}
+            fontFamily={style.font.family}
+            fontSize={style.font.size}
+            fontStyle="bold"
+            text={reward.name}
+            width={width}
+            x={0}
+            y={textStartY}
+            listening={!forExport}
+            onMouseEnter={() => !forExport && setHoveredPart('name')}
+            onMouseLeave={() => !forExport && setHoveredPart(null)}
+            onClick={() => {
+              if (!forExport && onTextClick && nameRef.current) {
+                const absPos = nameRef.current.getAbsolutePosition();
+                onTextClick('name', reward.name || "", {
+                  x: absPos.x,
+                  y: absPos.y,
+                  width: nameRef.current.width(),
+                  height: nameRef.current.height(),
+                });
+              }
+            }}
+          />
+          {/* 名称悬浮边框 */}
+          {!forExport && hoveredPart === 'name' && (
+            <Rect
+              x={-4}
+              y={textStartY - 4}
+              width={width + 8}
+              height={nameH + 8}
+              stroke="#ff3333"
+              strokeWidth={2}
+              dash={[5, 5]}
+              listening={false}
+            />
+          )}
+        </>
       )}
 
       {/* 奖励描述 - 居中对齐，与图片和标题保持一致 */}
       {reward.desc ? (
-        <Text
-          ref={descRef}
-          align="center"
-          direction={direction}
-          fill={style.contentColor}
-          fontFamily={style.font.family}
-          fontSize={style.font.size - 2}
-          lineHeight={style.font.lineHeight}
-          text={reward.desc}
-          width={width}
-          x={0}
-          y={textStartY + nameH + textGapV}
-        />
+        <>
+          <Text
+            ref={descRef}
+            align="center"
+            direction={direction}
+            fill={style.contentColor}
+            fontFamily={style.font.family}
+            fontSize={style.font.size - 2}
+            lineHeight={style.font.lineHeight}
+            text={reward.desc}
+            width={width}
+            x={0}
+            y={textStartY + nameH + textGapV}
+            listening={!forExport}
+            onMouseEnter={() => !forExport && setHoveredPart('desc')}
+            onMouseLeave={() => !forExport && setHoveredPart(null)}
+            onClick={() => {
+              if (!forExport && onTextClick && descRef.current) {
+                const absPos = descRef.current.getAbsolutePosition();
+                onTextClick('desc', reward.desc || "", {
+                  x: absPos.x,
+                  y: absPos.y,
+                  width: descRef.current.width(),
+                  height: descRef.current.height(),
+                });
+              }
+            }}
+          />
+          {/* 描述悬浮边框 */}
+          {!forExport && hoveredPart === 'desc' && (
+            <Rect
+              x={-4}
+              y={textStartY + nameH + textGapV - 4}
+              width={width + 8}
+              height={descRef.current ? descRef.current.height() + 8 : 20}
+              stroke="#ff3333"
+              strokeWidth={2}
+              dash={[5, 5]}
+              listening={false}
+            />
+          )}
+        </>
       ) : null}
     </Group>
   );
@@ -215,11 +305,28 @@ export function PageCanvas({
   style,
   forExport = false,
   onMeasured,
+  onTextClick,
+  onImageClick,
+  tableImageSize = 120,
 }: {
   page: Page;
   style: StyleCfg;
   forExport?: boolean;
   onMeasured?: (height: number) => void;
+  onTextClick?: (info: {
+    path: string; // 如 "blocks.0.sections.1.title"
+    value: string;
+    position: { x: number; y: number };
+    width: number;
+    height: number;
+    fontSize: number;
+    multiline: boolean;
+  }) => void;
+  onImageClick?: (info: {
+    path: string; // 如 "blocks.0.sections.1.rewards.0.image"
+    currentImage?: string;
+  }) => void;
+  tableImageSize?: number; // 表格图片大小，默认 120
 }) {
   // 规范化页面数据：支持新旧两种结构
   const normalizedPage = useMemo(() => normalizePage(page), [page]);
@@ -238,6 +345,9 @@ export function PageCanvas({
   const [measuredHeights, setMeasuredHeights] = useState<Map<string, number>>(
     new Map(),
   );
+
+  // 悬浮状态管理（用于显示虚线边框）
+  const [hoveredText, setHoveredText] = useState<string | null>(null);
 
   // 存储 Text 组件的 ref
   const textRefs = useRef<Map<string, Konva.Text>>(new Map());
@@ -339,7 +449,24 @@ export function PageCanvas({
       const tableKey = `section-${sectionIdx}-table`;
       const tableH = section.table
         ? measuredHeights.get(tableKey) ||
-          Math.ceil(style.font.size * 8 * (section.table.rows.length + 1)) // 初始估算：每行8倍字体大小（考虑图片和多行文本）
+          (() => {
+            // 检查表格中是否有图片单元格
+            let hasImages = false;
+            for (const row of section.table.rows) {
+              for (const cell of row) {
+                if (cell.is_image) {
+                  hasImages = true;
+                  break;
+                }
+              }
+              if (hasImages) break;
+            }
+            
+            // 如果有图片，使用图片最大高度估算（tableImageSize + padding）
+            // 否则使用文本高度估算（minRowHeight + padding）
+            const rowHeight = hasImages ? (tableImageSize + 16) : (style.font.size * 2 + 16);
+            return Math.ceil(rowHeight * (section.table.rows.length + 1));
+          })()
         : 0;
 
       // section 奖励区域高度
@@ -510,110 +637,224 @@ export function PageCanvas({
           <Group key={sectionIdx}>
             {/* Block 标题 - 大标题，稍大字号，水平居中 */}
             {s.section._isFirstInBlock && s.section._blockTitle ? (
-              <Text
-                ref={(node) => {
-                  if (node) {
-                    textRefs.current.set(
-                      `section-${sectionIdx}-blocktitle`,
-                      node,
-                    );
-                  }
-                }}
-                align="center"
-                direction={direction}
-                fill={style.titleColor}
-                fontFamily={style.font.family}
-                fontSize={style.font.size + 4}
-                fontStyle="bold"
-                text={s.section._blockTitle}
-                width={contentW}
-                x={contentX}
-                y={blockTitleY}
-              />
+              <>
+                <Text
+                  ref={(node) => {
+                    if (node) {
+                      textRefs.current.set(
+                        `section-${sectionIdx}-blocktitle`,
+                        node,
+                      );
+                    }
+                  }}
+                  align="center"
+                  direction={direction}
+                  fill={style.titleColor}
+                  fontFamily={style.font.family}
+                  fontSize={style.font.size + 4}
+                  fontStyle="bold"
+                  text={s.section._blockTitle}
+                  width={contentW}
+                  x={contentX}
+                  y={blockTitleY}
+                  listening={!forExport}
+                  onMouseEnter={() => !forExport && setHoveredText(`blocktitle-${sectionIdx}`)}
+                  onMouseLeave={() => !forExport && setHoveredText(null)}
+                  onClick={() => {
+                    if (!forExport && onTextClick) {
+                      const node = textRefs.current.get(`section-${sectionIdx}-blocktitle`);
+                      if (node) {
+                        const absPos = node.getAbsolutePosition();
+                        onTextClick({
+                          path: `sections.${sectionIdx}._blockTitle`,
+                          value: s.section._blockTitle || "",
+                          position: { x: absPos.x, y: absPos.y },
+                          width: node.width(),
+                          height: node.height(),
+                          fontSize: style.font.size + 4,
+                          multiline: false,
+                        });
+                      }
+                    }
+                  }}
+                />
+                {/* 悬浮时的虚线边框 */}
+                {!forExport && hoveredText === `blocktitle-${sectionIdx}` && (
+                  <Rect
+                    x={contentX - 4}
+                    y={blockTitleY - 4}
+                    width={contentW + 8}
+                    height={s.blockTitleH + 8}
+                    stroke="#ff3333"
+                    strokeWidth={2}
+                    dash={[5, 5]}
+                    listening={false}
+                  />
+                )}
+              </>
             ) : null}
 
             {/* Section 标题 - 水平居中 */}
             {s.section.title ? (
-              <Text
-                ref={(node) => {
-                  if (node) {
-                    textRefs.current.set(`section-${sectionIdx}-title`, node);
-                  }
-                }}
-                align="center"
-                direction={direction}
-                fill={style.titleColor}
-                fontFamily={style.font.family}
-                fontSize={style.font.size}
-                fontStyle="bold"
-                text={s.section.title}
-                width={contentW}
-                x={contentX}
-                y={titleY}
-              />
+              <>
+                <Text
+                  ref={(node) => {
+                    if (node) {
+                      textRefs.current.set(`section-${sectionIdx}-title`, node);
+                    }
+                  }}
+                  align="center"
+                  direction={direction}
+                  fill={style.titleColor}
+                  fontFamily={style.font.family}
+                  fontSize={style.font.size}
+                  fontStyle="bold"
+                  text={s.section.title}
+                  width={contentW}
+                  x={contentX}
+                  y={titleY}
+                  listening={!forExport}
+                  onMouseEnter={() => !forExport && setHoveredText(`title-${sectionIdx}`)}
+                  onMouseLeave={() => !forExport && setHoveredText(null)}
+                  onClick={() => {
+                    if (!forExport && onTextClick) {
+                      const node = textRefs.current.get(`section-${sectionIdx}-title`);
+                      if (node) {
+                        const absPos = node.getAbsolutePosition();
+                        onTextClick({
+                          path: `sections.${sectionIdx}.title`,
+                          value: s.section.title || "",
+                          position: { x: absPos.x, y: absPos.y },
+                          width: node.width(),
+                          height: node.height(),
+                          fontSize: style.font.size,
+                          multiline: false,
+                        });
+                      }
+                    }
+                  }}
+                />
+                {/* 悬浮时的虚线边框 */}
+                {!forExport && hoveredText === `title-${sectionIdx}` && (
+                  <Rect
+                    x={contentX - 4}
+                    y={titleY - 4}
+                    width={contentW + 8}
+                    height={s.titleH + 8}
+                    stroke="#ff3333"
+                    strokeWidth={2}
+                    dash={[5, 5]}
+                    listening={false}
+                  />
+                )}
+              </>
             ) : null}
 
             {/* Section 内容 - 支持单行加粗 */}
             {s.section.content ? (
-              <Group>
-                {(() => {
-                  const lines = s.section.content.split("\n");
-                  let cumulativeY = 0;
-
-                  return lines.map((line, lineIdx) => {
-                    let text = line;
-
-                    // 先检查是否整行加粗（因为后端先加居中再加粗）
-                    let isBold = false;
-
-                    if (text.startsWith("**") && text.endsWith("**")) {
-                      isBold = true;
-                      text = text.slice(2, -2); // 去掉 **
+              <>
+                <Group
+                  listening={!forExport}
+                  onMouseEnter={() => !forExport && setHoveredText(`content-${sectionIdx}`)}
+                  onMouseLeave={() => !forExport && setHoveredText(null)}
+                  onClick={() => {
+                    if (!forExport && onTextClick) {
+                      onTextClick({
+                        path: `sections.${sectionIdx}.content`,
+                        value: s.section.content || "",
+                        position: { x: contentX, y: contentY },
+                        width: contentW,
+                        height: s.contentH,
+                        fontSize: style.font.size,
+                        multiline: true,
+                      });
                     }
+                  }}
+                >
+                  {/* 透明 Rect 用于捕获鼠标事件 */}
+                  {!forExport && (
+                    <Rect
+                      x={contentX}
+                      y={contentY}
+                      width={contentW}
+                      height={s.contentH}
+                      fill="transparent"
+                      listening={true}
+                    />
+                  )}
+                  {(() => {
+                    const lines = s.section.content.split("\n");
+                    let cumulativeY = 0;
 
-                    // 再检查是否居中对齐
-                    let lineAlign = textAlign; // 默认对齐方式（基于语言方向）
+                    return lines.map((line, lineIdx) => {
+                      let text = line;
 
-                    if (text.startsWith("[center]")) {
-                      lineAlign = "center";
-                      text = text.slice(8); // 去掉 [center]
-                    }
+                      // 先检查是否整行加粗（因为后端先加居中再加粗）
+                      let isBold = false;
 
-                    const displayText = text;
-                    const lineKey = `section-${sectionIdx}-content-line-${lineIdx}`;
+                      if (text.startsWith("**") && text.endsWith("**")) {
+                        isBold = true;
+                        text = text.slice(2, -2); // 去掉 **
+                      }
 
-                    // 获取该行的测量高度（如果有），否则使用估算
-                    const lineHeight =
-                      measuredHeights.get(lineKey) ||
-                      style.font.size * style.font.lineHeight;
-                    const currentY = contentY + cumulativeY;
+                      // 再检查是否居中对齐
+                      let lineAlign = textAlign; // 默认对齐方式（基于语言方向）
 
-                    cumulativeY += lineHeight;
+                      if (text.startsWith("[center]")) {
+                        lineAlign = "center";
+                        text = text.slice(8); // 去掉 [center]
+                      }
 
-                    return (
-                      <Text
-                        key={lineKey}
-                        ref={(node) => {
-                          if (node) {
-                            textRefs.current.set(lineKey, node);
-                          }
-                        }}
-                        align={lineAlign}
-                        direction={direction}
-                        fill={style.contentColor}
-                        fontFamily={style.font.family}
-                        fontSize={style.font.size}
-                        fontStyle={isBold ? "bold" : "normal"}
-                        lineHeight={style.font.lineHeight}
-                        text={displayText}
-                        width={contentW}
-                        x={contentX}
-                        y={currentY}
-                      />
-                    );
-                  });
-                })()}
-              </Group>
+                      const displayText = text;
+                      const lineKey = `section-${sectionIdx}-content-line-${lineIdx}`;
+
+                      // 获取该行的测量高度（如果有），否则使用估算
+                      const lineHeight =
+                        measuredHeights.get(lineKey) ||
+                        style.font.size * style.font.lineHeight;
+                      const currentY = contentY + cumulativeY;
+
+                      cumulativeY += lineHeight;
+
+                      return (
+                        <Text
+                          key={lineKey}
+                          ref={(node) => {
+                            if (node) {
+                              textRefs.current.set(lineKey, node);
+                            }
+                          }}
+                          align={lineAlign}
+                          direction={direction}
+                          fill={style.contentColor}
+                          fontFamily={style.font.family}
+                          fontSize={style.font.size}
+                          fontStyle={isBold ? "bold" : "normal"}
+                          lineHeight={style.font.lineHeight}
+                          text={displayText}
+                          width={contentW}
+                          x={contentX}
+                          y={currentY}
+                          listening={false}
+                        />
+                      );
+                    });
+                  })()}
+                </Group>
+                {/* 悬浮时的虚线边框 */}
+                {!forExport && hoveredText === `content-${sectionIdx}` && (
+                  <Rect
+                    x={contentX - 4}
+                    y={contentY - 4}
+                    width={contentW + 8}
+                    height={s.contentH + 8}
+                    stroke="#ff3333"
+                    strokeWidth={2}
+                    dash={[5, 5]}
+                    listening={false}
+                  />
+                )}
+              </>
             ) : null}
 
             {/* Section 表格 */}
@@ -628,6 +869,8 @@ export function PageCanvas({
                 width={contentW}
                 x={contentX}
                 y={tableY}
+                maxImageHeight={tableImageSize}
+                forExport={forExport}
                 onHeightMeasured={(h) => {
                   const key = `section-${sectionIdx}-table`;
 
@@ -642,6 +885,27 @@ export function PageCanvas({
 
                     return prev;
                   });
+                }}
+                onTextClick={(rowIdx, colIdx, value) => {
+                  if (!forExport && onTextClick) {
+                    onTextClick({
+                      path: `sections.${sectionIdx}.table.rows.${rowIdx}.${colIdx}.value`,
+                      value,
+                      position: { x: contentX, y: tableY },
+                      width: contentW,
+                      height: style.font.size * style.font.lineHeight,
+                      fontSize: style.font.size,
+                      multiline: false,
+                    });
+                  }
+                }}
+                onImageClick={(rowIdx, colIdx, currentImage) => {
+                  if (!forExport && onImageClick) {
+                    onImageClick({
+                      path: `sections.${sectionIdx}.table.rows.${rowIdx}.${colIdx}.image`,
+                      currentImage,
+                    });
+                  }
                 }}
               />
             ) : null}
@@ -696,7 +960,9 @@ export function PageCanvas({
                         <RewardItem
                           key={`${sectionIdx}-${rewardIdx}`}
                           direction={direction}
+                          forExport={forExport}
                           reward={s.rewards[rewardIdx]}
+                          rewardPath={`sections.${sectionIdx}.rewards.${rewardIdx}`}
                           style={style}
                           width={rewardColW}
                           x={x}
@@ -715,6 +981,32 @@ export function PageCanvas({
 
                               return prev;
                             });
+                          }}
+                          onTextClick={(field, value, pos) => {
+                            if (onTextClick) {
+                              onTextClick({
+                                path: `sections.${sectionIdx}.rewards.${rewardIdx}.${field}`,
+                                value,
+                                position: { x: pos.x, y: pos.y },
+                                width: pos.width,
+                                height: pos.height,
+                                fontSize: field === 'name' ? style.font.size : style.font.size - 2,
+                                multiline: false,
+                              });
+                            }
+                          }}
+                          onImageClick={() => {
+                            if (onImageClick) {
+                              const currentImage = s.rewards[rewardIdx].image;
+                              const imageUrl = typeof currentImage === 'string' 
+                                ? currentImage 
+                                : currentImage?.url;
+                              
+                              onImageClick({
+                                path: `sections.${sectionIdx}.rewards.${rewardIdx}.image`,
+                                currentImage: imageUrl,
+                              });
+                            }
                           }}
                         />
                       );

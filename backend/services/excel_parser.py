@@ -193,34 +193,18 @@ def parse_section_block(ws, c1, c2, r_start, r_end, merge_idx):
     def collect_table(r0):
         """
         收集表格数据
-        TABLE- 标记可能在任意列，下一行是表头
-        后续行直到下一个 TABLE- 或其他标记为止
-        支持文字和图片（图片以 image: 或直接文件名形式）
+        TABLE- 标记后的所有行都是表格内容（没有表头概念）
+        直到下一个 TABLE- 或其他标记为止
+        支持文字和图片、居中、加粗等格式
         """
         table_data = {
             "type": "table",
-            "headers": [],
             "rows": []
         }
         
-        rr = r0 + 1  # 跳过 TABLE- 标记行，从下一行开始是表头
+        rr = r0 + 1  # 跳过 TABLE- 标记行，从下一行开始是表格内容
         
-        # 第一行是表头
-        if rr <= r_end:
-            header_vals = row_region_values(ws, rr, c1, c2, merge_idx)
-            # 过滤空值并去重（处理合并单元格）
-            # 跳过第一列（标记列），只收集后续列的表头
-            seen = set()
-            for idx, val in enumerate(header_vals):
-                if idx == 0:
-                    continue  # 跳过第一列（标记列）
-                # 跳过空值和重复值
-                if val and val not in seen:
-                    table_data["headers"].append(val)
-                    seen.add(val)
-            rr += 1
-        
-        # 后续行是数据
+        # 所有行都是数据行（没有表头）
         while rr <= r_end:
             rv = row_region_values(ws, rr, c1, c2, merge_idx)
             
@@ -241,12 +225,36 @@ def parse_section_block(ws, c1, c2, r_start, r_end, merge_idx):
             
             # 收集这一行的数据（跳过第一列标记列，只收集后续列）
             row_data = []
-            seen = set()
+            col_output_idx = 0  # 输出列索引（不包括标记列）
             
             for col_idx, val in enumerate(rv):
                 # 跳过第一列（标记列）
                 if col_idx == 0:
                     continue
+                
+                # 检查当前单元格是否在合并区域内
+                actual_row = rr
+                actual_col = c1 + col_idx
+                rowspan = 1
+                colspan = 1
+                is_merged_child = False
+                
+                if (actual_row, actual_col) in merge_idx:
+                    min_r, min_c, max_r, max_c = merge_idx[(actual_row, actual_col)]
+                    rowspan = max_r - min_r + 1
+                    colspan = max_c - min_c + 1
+                    # 如果不是合并区域的左上角单元格，标记为合并子单元格（不输出）
+                    if actual_row != min_r or actual_col != min_c:
+                        is_merged_child = True
+                
+                # 合并区域的子单元格跳过（前端会自动处理）
+                if is_merged_child:
+                    continue
+                
+                # 获取单元格格式信息（加粗、居中）
+                cell_info = get_cell_info(ws, actual_row, actual_col, merge_idx)
+                is_bold = cell_info['bold']
+                is_center = cell_info['center']
                 
                 # 检测是否是图片标记（包含文件扩展名或 image: 前缀）
                 is_image = False
@@ -260,22 +268,19 @@ def parse_section_block(ws, c1, c2, r_start, r_end, merge_idx):
                         # 记录图片位置信息用于后续图片匹配
                         image_id = val if not val_lower.startswith('image:') else val[6:].strip()
                 
-                # 即使是空值也要保留（可能是图片列），以保持列对齐
-                # 只去重非空的重复值
-                if val and val in seen:
-                    continue
-                
                 cell_data = {
                     "value": val if val else "",
                     "is_image": is_image,
-                    "_row": rr,
-                    "_col": c1 + col_idx,
+                    "rowspan": rowspan,
+                    "colspan": colspan,
+                    "bold": is_bold,
+                    "center": is_center,
+                    "_row": actual_row,
+                    "_col": actual_col,
                     "_expected": image_id if is_image else None
                 }
                 row_data.append(cell_data)
-                
-                if val:
-                    seen.add(val)
+                col_output_idx += 1
             
             if row_data:
                 table_data["rows"].append(row_data)

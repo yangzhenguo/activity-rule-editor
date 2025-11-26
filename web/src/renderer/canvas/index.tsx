@@ -89,7 +89,12 @@ export async function exportPagesToPng(
     const page = data.pages[i];
     const dataUrl = await renderPageToDataURL(page, style, pixelRatio);
 
-    out.push({ name: `page-${i + 1}.png`, dataUrl });
+    // 使用 page.region 作为文件名，与单张下载保持一致
+    const regionName = page.region || `page-${i + 1}`;
+    const sanitizedName = regionName.replace(/[<>:"/\\|?*]/g, "_");
+    const fileName = `${sanitizedName}.png`;
+
+    out.push({ name: fileName, dataUrl });
 
     // 发送阶段化进度回调（render 阶段）
     if (onProgress) {
