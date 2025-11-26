@@ -260,7 +260,10 @@ export async function savePngsMultiSheet(
     if (error?.name === "AbortError") {
       return { ok: false, error: "用户已取消" };
     }
-    console.warn("File System Access API 失败，回退到 Blob URL:", error);
+    // File System Access API 失败，回退到 Blob URL
+    if (import.meta.env.DEV) {
+      console.warn("File System Access API 失败，回退到 Blob URL:", error);
+    }
   }
 
   // 回退到传统下载

@@ -94,18 +94,16 @@ const CanvasCell = memo(
     style,
     zoomPct,
     estHeight,
-    pixelRatio,
     onMeasured,
     onDownload,
     onTextClick,
     onImageClick,
     tableImageSize,
   }: {
-    page: any;
+    page: Page;
     style: StyleCfg;
     zoomPct: number;
     estHeight: number;
-    pixelRatio: number;
     onMeasured: (h: number) => void;
     onDownload: () => void;
     onTextClick: (info: any) => void;
@@ -194,13 +192,13 @@ const CanvasCell = memo(
               width={baseWidth}
             >
               <Layer listening={true} perfectDrawEnabled={false}>
-                <PageCanvas 
-                  page={page} 
-                  style={style} 
+                <PageCanvas
+                  page={page}
+                  style={style}
+                  tableImageSize={tableImageSize}
+                  onImageClick={onImageClick}
                   onMeasured={onMeasured}
                   onTextClick={(info) => onTextClick(info)}
-                  onImageClick={onImageClick}
-                  tableImageSize={tableImageSize}
                 />
               </Layer>
             </Stage>
@@ -218,11 +216,11 @@ const CanvasCell = memo(
             >
               <Button
                 isIconOnly
-                size="sm"
+                aria-label="下载"
                 color="success"
+                size="sm"
                 variant="shadow"
                 onPress={onDownload}
-                aria-label="下载"
               >
                 ⬇️
               </Button>
@@ -321,8 +319,13 @@ export default function PreviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [heights, setHeights] = useState<number[]>([]);
   const [tableImageSize, setTableImageSize] = useState(120); // 表格图片大小
-  const [uploadedDataFile, setUploadedDataFile] = useState<{name: string, type: string} | null>(null); // 已上传的数据文件
-  const [uploadedBorderFile, setUploadedBorderFile] = useState<string | null>(null); // 已上传的边框图文件名
+  const [uploadedDataFile, setUploadedDataFile] = useState<{
+    name: string;
+    type: string;
+  } | null>(null); // 已上传的数据文件
+  const [uploadedBorderFile, setUploadedBorderFile] = useState<string | null>(
+    null,
+  ); // 已上传的边框图文件名
 
   // 编辑功能状态
   const [editingText, setEditingText] = useState<{
@@ -334,6 +337,8 @@ export default function PreviewPage() {
     height: number;
     fontSize: number;
     multiline: boolean;
+    title: string;
+    large: boolean;
   } | null>(null);
 
   const [editingImage, setEditingImage] = useState<{
@@ -382,7 +387,7 @@ export default function PreviewPage() {
         "【调试】用户上传 JSON 内容:\n" + JSON.stringify(json, null, 2),
       );
       setData(json);
-      setUploadedDataFile({ name: file.name, type: 'json' });
+      setUploadedDataFile({ name: file.name, type: "json" });
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -448,7 +453,7 @@ export default function PreviewPage() {
           payload.skipped_sheets,
         );
       }
-      setUploadedDataFile({ name: file.name, type: 'xlsx' });
+      setUploadedDataFile({ name: file.name, type: "xlsx" });
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -526,11 +531,19 @@ export default function PreviewPage() {
   );
 
   // 处理文字点击
-  const handleTextClick = useCallback((pageIndex: number, info: any) => {
+  const handleTextClick = useCallback((pageIndex: number, info: {
+    path: string;
+    value: string;
+    position: { x: number; y: number };
+    width?: number;
+    height?: number;
+    fontSize?: number;
+    multiline?: boolean;
+  }) => {
     // 根据路径判断编辑的是什么内容
     let title = "编辑文字";
     let large = false;
-    
+
     if (info.path.includes(".table.rows.")) {
       title = "编辑表格单元格";
     } else if (info.path.includes(".content")) {
@@ -547,12 +560,16 @@ export default function PreviewPage() {
         title = "编辑奖励描述";
       }
     }
-    
+
     setEditingText({
       pageIndex,
       path: info.path,
       value: info.value,
-      multiline: info.multiline,
+      position: info.position,
+      width: info.width ?? 0,
+      height: info.height ?? 0,
+      fontSize: info.fontSize ?? 14,
+      multiline: info.multiline ?? false,
       title,
       large,
     });
@@ -567,165 +584,189 @@ export default function PreviewPage() {
   }, []);
 
   // 保存文字编辑
-  const handleTextSave = useCallback((newValue: string) => {
-    if (!editingText) return;
+  const handleTextSave = useCallback(
+    (newValue: string) => {
+      if (!editingText) return;
 
-    const newData = JSON.parse(JSON.stringify(data));
-    const page = newData.pages[editingText.pageIndex];
-    
-    // 解析路径：sections.0.title 或 sections.0.rewards.1.name
-    const pathParts = editingText.path.split('.');
-    
-    // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
-    if (page.blocks && pathParts[0] === 'sections') {
-      const sectionIdx = Number(pathParts[1]);
-      
-      // 找到这个 section 属于哪个 block
-      let currentSectionCount = 0;
-      for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
-        const block = page.blocks[blockIdx];
-        const sectionsInBlock = block.sections.length;
-        
-        if (currentSectionCount + sectionsInBlock > sectionIdx) {
-          // 找到了对应的 block
-          const sectionInBlockIdx = sectionIdx - currentSectionCount;
-          
-          // 构建新路径
-          let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
-          
-          // 处理剩余路径 (title, content, rewards.X.name等)
-          for (let i = 2; i < pathParts.length - 1; i++) {
-            const key = pathParts[i];
-            if (!isNaN(Number(pathParts[i + 1]))) {
-              target = target[key][Number(pathParts[++i])];
-            } else {
-              target = target[key];
+      const newData = JSON.parse(JSON.stringify(data));
+      const page = newData.pages[editingText.pageIndex];
+
+      // 解析路径：sections.0.title 或 sections.0.rewards.1.name
+      const pathParts = editingText.path.split(".");
+
+      // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
+      if (page.blocks && pathParts[0] === "sections") {
+        const sectionIdx = Number(pathParts[1]);
+
+        // 找到这个 section 属于哪个 block
+        let currentSectionCount = 0;
+
+        for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+          const block = page.blocks[blockIdx];
+          const sectionsInBlock = block.sections.length;
+
+          if (currentSectionCount + sectionsInBlock > sectionIdx) {
+            // 找到了对应的 block
+            const sectionInBlockIdx = sectionIdx - currentSectionCount;
+
+            // 构建新路径
+            let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
+
+            // 处理剩余路径 (title, content, rewards.X.name等)
+            for (let i = 2; i < pathParts.length - 1; i++) {
+              const key = pathParts[i];
+
+              if (!isNaN(Number(pathParts[i + 1]))) {
+                target = target[key][Number(pathParts[++i])];
+              } else {
+                target = target[key];
+              }
             }
+
+            target[pathParts[pathParts.length - 1]] = newValue;
+            break;
           }
-          
-          target[pathParts[pathParts.length - 1]] = newValue;
-          break;
-        }
-        
-        currentSectionCount += sectionsInBlock;
-      }
-    } else {
-      // 旧结构或直接 sections，直接更新
-      let target: any = page;
-      for (let i = 0; i < pathParts.length - 1; i++) {
-        const key = pathParts[i];
-        if (!isNaN(Number(pathParts[i + 1]))) {
-          target = target[key][Number(pathParts[++i])];
-        } else {
-          target = target[key];
-        }
-      }
-      target[pathParts[pathParts.length - 1]] = newValue;
-    }
 
-    setData(newData);
-    
-    // 同步到 allSheets
-    const newSheets = new Map(allSheets);
-    newSheets.set(currentSheet, newData);
-    setAllSheets(newSheets);
+          currentSectionCount += sectionsInBlock;
+        }
+      } else {
+        // 旧结构或直接 sections，直接更新
+        let target: any = page;
 
-    setEditingText(null);
-    console.log("✓ 文字已保存:", newValue);
-  }, [editingText, data, allSheets, currentSheet]);
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const key = pathParts[i];
+
+          if (!isNaN(Number(pathParts[i + 1]))) {
+            target = target[key][Number(pathParts[++i])];
+          } else {
+            target = target[key];
+          }
+        }
+        target[pathParts[pathParts.length - 1]] = newValue;
+      }
+
+      setData(newData);
+
+      // 同步到 allSheets
+      const newSheets = new Map(allSheets);
+
+      newSheets.set(currentSheet, newData);
+      setAllSheets(newSheets);
+
+      setEditingText(null);
+      console.log("✓ 文字已保存:", newValue);
+    },
+    [editingText, data, allSheets, currentSheet],
+  );
 
   // 保存图片替换
-  const handleImageSave = useCallback((imageDataUrl: string) => {
-    if (!editingImage) return;
+  const handleImageSave = useCallback(
+    (imageDataUrl: string) => {
+      if (!editingImage) return;
 
-    const newData = JSON.parse(JSON.stringify(data));
-    const page = newData.pages[editingImage.pageIndex];
-    
-    // 解析路径：sections.0.rewards.1.image
-    const pathParts = editingImage.path.split('.');
-    
-    // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
-    if (page.blocks && pathParts[0] === 'sections') {
-      const sectionIdx = Number(pathParts[1]);
-      
-      // 找到这个 section 属于哪个 block
-      let currentSectionCount = 0;
-      for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
-        const block = page.blocks[blockIdx];
-        const sectionsInBlock = block.sections.length;
-        
-        if (currentSectionCount + sectionsInBlock > sectionIdx) {
-          // 找到了对应的 block
-          const sectionInBlockIdx = sectionIdx - currentSectionCount;
-          
-          // 构建新路径
-          let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
-          
-          // 处理剩余路径 (rewards.X.image)
-          for (let i = 2; i < pathParts.length - 1; i++) {
-            const key = pathParts[i];
-            if (!isNaN(Number(pathParts[i + 1]))) {
-              target = target[key][Number(pathParts[++i])];
-            } else {
-              target = target[key];
+      const newData = JSON.parse(JSON.stringify(data));
+      const page = newData.pages[editingImage.pageIndex];
+
+      // 解析路径：sections.0.rewards.1.image
+      const pathParts = editingImage.path.split(".");
+
+      // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
+      if (page.blocks && pathParts[0] === "sections") {
+        const sectionIdx = Number(pathParts[1]);
+
+        // 找到这个 section 属于哪个 block
+        let currentSectionCount = 0;
+
+        for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+          const block = page.blocks[blockIdx];
+          const sectionsInBlock = block.sections.length;
+
+          if (currentSectionCount + sectionsInBlock > sectionIdx) {
+            // 找到了对应的 block
+            const sectionInBlockIdx = sectionIdx - currentSectionCount;
+
+            // 构建新路径
+            let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
+
+            // 处理剩余路径 (rewards.X.image)
+            for (let i = 2; i < pathParts.length - 1; i++) {
+              const key = pathParts[i];
+
+              if (!isNaN(Number(pathParts[i + 1]))) {
+                target = target[key][Number(pathParts[++i])];
+              } else {
+                target = target[key];
+              }
             }
+
+            target[pathParts[pathParts.length - 1]] = imageDataUrl;
+            break;
           }
-          
-          target[pathParts[pathParts.length - 1]] = imageDataUrl;
-          break;
-        }
-        
-        currentSectionCount += sectionsInBlock;
-      }
-    } else {
-      // 旧结构或直接 sections，直接更新
-      let target: any = page;
-      for (let i = 0; i < pathParts.length - 1; i++) {
-        const key = pathParts[i];
-        if (!isNaN(Number(pathParts[i + 1]))) {
-          target = target[key][Number(pathParts[++i])];
-        } else {
-          target = target[key];
-        }
-      }
-      target[pathParts[pathParts.length - 1]] = imageDataUrl;
-    }
 
-    setData(newData);
-    
-    // 同步到 allSheets
-    const newSheets = new Map(allSheets);
-    newSheets.set(currentSheet, newData);
-    setAllSheets(newSheets);
+          currentSectionCount += sectionsInBlock;
+        }
+      } else {
+        // 旧结构或直接 sections，直接更新
+        let target: any = page;
 
-    setEditingImage(null);
-    console.log("✓ 图片已保存");
-  }, [editingImage, data, allSheets, currentSheet]);
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const key = pathParts[i];
+
+          if (!isNaN(Number(pathParts[i + 1]))) {
+            target = target[key][Number(pathParts[++i])];
+          } else {
+            target = target[key];
+          }
+        }
+        target[pathParts[pathParts.length - 1]] = imageDataUrl;
+      }
+
+      setData(newData);
+
+      // 同步到 allSheets
+      const newSheets = new Map(allSheets);
+
+      newSheets.set(currentSheet, newData);
+      setAllSheets(newSheets);
+
+      setEditingImage(null);
+      console.log("✓ 图片已保存");
+    },
+    [editingImage, data, allSheets, currentSheet],
+  );
 
   // 下载单个页面
-  const onDownloadPage = useCallback(async (pageIndex: number) => {
-    try {
-      const page = data.pages[pageIndex];
-      const dataUrl = await renderPageToDataURL(page, debouncedStyle, pixelRatio);
-      
-      // 使用 page.region 作为文件名
-      const regionName = page.region || `page-${pageIndex + 1}`;
-      const sanitizedName = regionName.replace(/[<>:"/\\|?*]/g, "_");
-      const fileName = `${sanitizedName}.png`;
+  const onDownloadPage = useCallback(
+    async (pageIndex: number) => {
+      try {
+        const page = data.pages[pageIndex];
+        const dataUrl = await renderPageToDataURL(
+          page,
+          debouncedStyle,
+          pixelRatio,
+        );
 
-      // 触发下载
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+        // 使用 page.region 作为文件名
+        const regionName = page.region || `page-${pageIndex + 1}`;
+        const sanitizedName = regionName.replace(/[<>:"/\\|?*]/g, "_");
+        const fileName = `${sanitizedName}.png`;
 
-      console.log(`✓ 已下载: ${fileName}`);
-    } catch (e: any) {
-      alert(`下载失败: ${e?.message ?? String(e)}`);
-    }
-  }, [data, debouncedStyle, pixelRatio]);
+        // 触发下载
+        const a = document.createElement("a");
+
+        a.href = dataUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        console.log(`✓ 已下载: ${fileName}`);
+      } catch (e: any) {
+        alert(`下载失败: ${e?.message ?? String(e)}`);
+      }
+    },
+    [data, debouncedStyle, pixelRatio],
+  );
 
   const onExport = useCallback(async () => {
     setLoading(true);
@@ -878,12 +919,12 @@ export default function PreviewPage() {
   // 检查当前页面是否有表格且表格中是否有图片
   const hasTableWithImages = useMemo(() => {
     if (!data.pages || data.pages.length === 0) return false;
-    
+
     for (const page of data.pages) {
-      const sections = page.blocks 
-        ? page.blocks.flatMap(block => block.sections || [])
+      const sections = page.blocks
+        ? page.blocks.flatMap((block) => block.sections || [])
         : page.sections || [];
-      
+
       for (const section of sections) {
         if (section.table?.rows) {
           // 检查表格中是否有图片
@@ -897,7 +938,7 @@ export default function PreviewPage() {
         }
       }
     }
-    
+
     return false;
   }, [data]);
 
@@ -922,25 +963,27 @@ export default function PreviewPage() {
               <div className="relative border-2 border-gray-200 rounded-lg p-4 bg-gray-50 min-h-[120px] flex items-center">
                 <Button
                   isIconOnly
-                  size="sm"
-                  color="danger"
-                  variant="flat"
-                  className="absolute top-2 right-2"
-                  onPress={onDeleteDataFile}
                   aria-label="删除文件"
+                  className="absolute top-2 right-2"
+                  color="danger"
+                  size="sm"
+                  variant="flat"
+                  onPress={onDeleteDataFile}
                 >
                   ✕
                 </Button>
                 <div className="flex items-center gap-3 pr-8 w-full">
                   <div className="text-4xl">
-                    {uploadedDataFile.type === 'xlsx' ? '📊' : '📄'}
+                    {uploadedDataFile.type === "xlsx" ? "📊" : "📄"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
                       {uploadedDataFile.name}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {uploadedDataFile.type === 'xlsx' ? 'Excel 表格' : 'JSON 文件'}
+                      {uploadedDataFile.type === "xlsx"
+                        ? "Excel 表格"
+                        : "JSON 文件"}
                     </p>
                   </div>
                 </div>
@@ -970,12 +1013,12 @@ export default function PreviewPage() {
               <div className="relative border-2 border-gray-200 rounded-lg p-3 bg-gray-50 min-h-[120px] flex items-center">
                 <Button
                   isIconOnly
-                  size="sm"
-                  color="danger"
-                  variant="flat"
-                  className="absolute top-2 right-2 z-10"
-                  onPress={onDeleteBorderFile}
                   aria-label="删除边框图"
+                  className="absolute top-2 right-2 z-10"
+                  color="danger"
+                  size="sm"
+                  variant="flat"
+                  onPress={onDeleteBorderFile}
                 >
                   ✕
                 </Button>
@@ -983,9 +1026,9 @@ export default function PreviewPage() {
                   {style.border.image && (
                     <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border border-gray-200">
                       <img
-                        src={style.border.image}
                         alt="边框图预览"
                         className="w-full h-full object-cover"
+                        src={style.border.image}
                       />
                     </div>
                   )}
@@ -993,9 +1036,7 @@ export default function PreviewPage() {
                     <p className="text-sm font-medium text-gray-900 truncate">
                       {uploadedBorderFile}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      边框图片
-                    </p>
+                    <p className="text-xs text-gray-500 mt-1">边框图片</p>
                   </div>
                 </div>
               </div>
@@ -1159,11 +1200,12 @@ export default function PreviewPage() {
 
             {/* 内边距 */}
             <div>
-              <label className="text-xs font-medium text-gray-700 block mb-2">
+              <label htmlFor="pad-t" className="text-xs font-medium text-gray-700 block mb-2">
                 内边距
               </label>
               <div className="grid grid-cols-4 gap-2">
                 <Input
+                  id="pad-t"
                   label="上"
                   size="sm"
                   type="number"
@@ -1218,21 +1260,23 @@ export default function PreviewPage() {
           {/* 表格图片大小调整 */}
           {hasTableWithImages && (
             <div className="bg-white rounded-lg border border-gray-200 p-4 mt-4">
-              <h3 className="text-sm font-medium mb-4 text-gray-900">表格图片大小</h3>
+              <h3 className="text-sm font-medium mb-4 text-gray-900">
+                表格图片大小
+              </h3>
               <Slider
+                className="max-w-full"
                 label="图片高度"
+                maxValue={160}
+                minValue={80}
+                showTooltip={true}
                 size="sm"
                 step={10}
-                minValue={80}
-                maxValue={160}
-                value={tableImageSize}
-                onChange={(value) => setTableImageSize(value as number)}
-                className="max-w-full"
-                showTooltip={true}
                 tooltipProps={{
                   placement: "top",
-                  content: `${tableImageSize}px`
+                  content: `${tableImageSize}px`,
                 }}
+                value={tableImageSize}
+                onChange={(value) => setTableImageSize(value as number)}
               />
               <div className="text-xs text-gray-500 mt-2">
                 范围: 80-160px，当前: {tableImageSize}px
@@ -1356,20 +1400,26 @@ export default function PreviewPage() {
             minHeight: 0, // 确保 flex 子元素可以缩小
           }}
         >
-          <div style={{ display: "flex", gap: 16, width: "max-content", minHeight: "100%" }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 16,
+              width: "max-content",
+              minHeight: "100%",
+            }}
+          >
             {data.pages.map((page, index) => (
               <CanvasCell
                 key={`${currentSheet}-${index}`}
                 estHeight={heights[index] || 1200}
                 page={page}
-                pixelRatio={pixelRatio}
                 style={debouncedStyle}
+                tableImageSize={tableImageSize}
                 zoomPct={deferredZoom}
                 onDownload={() => onDownloadPage(index)}
-                onTextClick={(info) => handleTextClick(index, info)}
                 onImageClick={(info) => handleImageClick(index, info)}
                 onMeasured={onMeasuredByIndex(index)}
-                tableImageSize={tableImageSize}
+                onTextClick={(info) => handleTextClick(index, info)}
               />
             ))}
           </div>
@@ -1380,19 +1430,19 @@ export default function PreviewPage() {
       {editingText && (
         <TextEditModal
           isOpen={true}
-          onClose={() => setEditingText(null)}
-          onSave={handleTextSave}
+          large={editingText.large}
+          multiline={editingText.multiline}
           title={editingText.title}
           value={editingText.value}
-          multiline={editingText.multiline}
-          large={editingText.large}
+          onClose={() => setEditingText(null)}
+          onSave={handleTextSave}
         />
       )}
 
       {/* 图片上传弹窗 */}
       <ImageUploadModal
-        isOpen={!!editingImage}
         currentImage={editingImage?.currentImage}
+        isOpen={!!editingImage}
         onClose={() => setEditingImage(null)}
         onSave={handleImageSave}
       />

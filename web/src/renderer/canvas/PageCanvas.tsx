@@ -69,7 +69,7 @@ function RewardItem({
   onHeightMeasured,
   onTextClick,
   onImageClick,
-  rewardPath,
+  rewardPath: _rewardPath,
 }: {
   reward: Reward;
   x: number;
@@ -79,14 +79,20 @@ function RewardItem({
   direction?: "rtl" | "ltr";
   forExport?: boolean;
   onHeightMeasured?: (h: number) => void;
-  onTextClick?: (field: 'name' | 'desc', value: string, pos: {x: number, y: number, width: number, height: number}) => void;
+  onTextClick?: (
+    field: "name" | "desc",
+    value: string,
+    pos: { x: number; y: number; width: number; height: number },
+  ) => void;
   onImageClick?: () => void;
   rewardPath?: string;
 }) {
   const [rewardImg, setRewardImg] = useState<CanvasImageSource | null>(null);
   const nameRef = useRef<Konva.Text>(null);
   const descRef = useRef<Konva.Text>(null);
-  const [hoveredPart, setHoveredPart] = useState<'image' | 'name' | 'desc' | null>(null);
+  const [hoveredPart, setHoveredPart] = useState<
+    "image" | "name" | "desc" | null
+  >(null);
 
   useEffect(() => {
     if (!reward.image) {
@@ -177,29 +183,29 @@ function RewardItem({
           <KImage
             height={displayImgH}
             image={rewardImg as any}
+            listening={!forExport}
             width={displayImgW}
             x={(width - imgBoxSize) / 2 + imgOffsetX}
             y={imgPadding + imgOffsetY}
-            listening={!forExport}
-            onMouseEnter={() => !forExport && setHoveredPart('image')}
-            onMouseLeave={() => !forExport && setHoveredPart(null)}
             onClick={() => {
               if (!forExport && onImageClick) {
                 onImageClick();
               }
             }}
+            onMouseEnter={() => !forExport && setHoveredPart("image")}
+            onMouseLeave={() => !forExport && setHoveredPart(null)}
           />
           {/* 图片悬浮边框 */}
-          {!forExport && hoveredPart === 'image' && (
+          {!forExport && hoveredPart === "image" && (
             <Rect
-              x={(width - imgBoxSize) / 2 - 4}
-              y={imgPadding - 4}
-              width={imgBoxSize + 8}
+              dash={[5, 5]}
               height={imgBoxSize + 8}
+              listening={false}
               stroke="#ff3333"
               strokeWidth={2}
-              dash={[5, 5]}
-              listening={false}
+              width={imgBoxSize + 8}
+              x={(width - imgBoxSize) / 2 - 4}
+              y={imgPadding - 4}
             />
           )}
         </>
@@ -216,17 +222,16 @@ function RewardItem({
             fontFamily={style.font.family}
             fontSize={style.font.size}
             fontStyle="bold"
+            listening={!forExport}
             text={reward.name}
             width={width}
             x={0}
             y={textStartY}
-            listening={!forExport}
-            onMouseEnter={() => !forExport && setHoveredPart('name')}
-            onMouseLeave={() => !forExport && setHoveredPart(null)}
             onClick={() => {
               if (!forExport && onTextClick && nameRef.current) {
                 const absPos = nameRef.current.getAbsolutePosition();
-                onTextClick('name', reward.name || "", {
+
+                onTextClick("name", reward.name || "", {
                   x: absPos.x,
                   y: absPos.y,
                   width: nameRef.current.width(),
@@ -234,18 +239,20 @@ function RewardItem({
                 });
               }
             }}
+            onMouseEnter={() => !forExport && setHoveredPart("name")}
+            onMouseLeave={() => !forExport && setHoveredPart(null)}
           />
           {/* 名称悬浮边框 */}
-          {!forExport && hoveredPart === 'name' && (
+          {!forExport && hoveredPart === "name" && (
             <Rect
-              x={-4}
-              y={textStartY - 4}
-              width={width + 8}
+              dash={[5, 5]}
               height={nameH + 8}
+              listening={false}
               stroke="#ff3333"
               strokeWidth={2}
-              dash={[5, 5]}
-              listening={false}
+              width={width + 8}
+              x={-4}
+              y={textStartY - 4}
             />
           )}
         </>
@@ -262,17 +269,16 @@ function RewardItem({
             fontFamily={style.font.family}
             fontSize={style.font.size - 2}
             lineHeight={style.font.lineHeight}
+            listening={!forExport}
             text={reward.desc}
             width={width}
             x={0}
             y={textStartY + nameH + textGapV}
-            listening={!forExport}
-            onMouseEnter={() => !forExport && setHoveredPart('desc')}
-            onMouseLeave={() => !forExport && setHoveredPart(null)}
             onClick={() => {
               if (!forExport && onTextClick && descRef.current) {
                 const absPos = descRef.current.getAbsolutePosition();
-                onTextClick('desc', reward.desc || "", {
+
+                onTextClick("desc", reward.desc || "", {
                   x: absPos.x,
                   y: absPos.y,
                   width: descRef.current.width(),
@@ -280,18 +286,20 @@ function RewardItem({
                 });
               }
             }}
+            onMouseEnter={() => !forExport && setHoveredPart("desc")}
+            onMouseLeave={() => !forExport && setHoveredPart(null)}
           />
           {/* 描述悬浮边框 */}
-          {!forExport && hoveredPart === 'desc' && (
+          {!forExport && hoveredPart === "desc" && (
             <Rect
-              x={-4}
-              y={textStartY + nameH + textGapV - 4}
-              width={width + 8}
+              dash={[5, 5]}
               height={descRef.current ? descRef.current.height() + 8 : 20}
+              listening={false}
               stroke="#ff3333"
               strokeWidth={2}
-              dash={[5, 5]}
-              listening={false}
+              width={width + 8}
+              x={-4}
+              y={textStartY + nameH + textGapV - 4}
             />
           )}
         </>
@@ -452,6 +460,7 @@ export function PageCanvas({
           (() => {
             // 检查表格中是否有图片单元格
             let hasImages = false;
+
             for (const row of section.table.rows) {
               for (const cell of row) {
                 if (cell.is_image) {
@@ -461,10 +470,13 @@ export function PageCanvas({
               }
               if (hasImages) break;
             }
-            
+
             // 如果有图片，使用图片最大高度估算（tableImageSize + padding）
             // 否则使用文本高度估算（minRowHeight + padding）
-            const rowHeight = hasImages ? (tableImageSize + 16) : (style.font.size * 2 + 16);
+            const rowHeight = hasImages
+              ? tableImageSize + 16
+              : style.font.size * 2 + 16;
+
             return Math.ceil(rowHeight * (section.table.rows.length + 1));
           })()
         : 0;
@@ -653,18 +665,20 @@ export function PageCanvas({
                   fontFamily={style.font.family}
                   fontSize={style.font.size + 4}
                   fontStyle="bold"
+                  listening={!forExport}
                   text={s.section._blockTitle}
                   width={contentW}
                   x={contentX}
                   y={blockTitleY}
-                  listening={!forExport}
-                  onMouseEnter={() => !forExport && setHoveredText(`blocktitle-${sectionIdx}`)}
-                  onMouseLeave={() => !forExport && setHoveredText(null)}
                   onClick={() => {
                     if (!forExport && onTextClick) {
-                      const node = textRefs.current.get(`section-${sectionIdx}-blocktitle`);
+                      const node = textRefs.current.get(
+                        `section-${sectionIdx}-blocktitle`,
+                      );
+
                       if (node) {
                         const absPos = node.getAbsolutePosition();
+
                         onTextClick({
                           path: `sections.${sectionIdx}._blockTitle`,
                           value: s.section._blockTitle || "",
@@ -677,18 +691,22 @@ export function PageCanvas({
                       }
                     }
                   }}
+                  onMouseEnter={() =>
+                    !forExport && setHoveredText(`blocktitle-${sectionIdx}`)
+                  }
+                  onMouseLeave={() => !forExport && setHoveredText(null)}
                 />
                 {/* 悬浮时的虚线边框 */}
                 {!forExport && hoveredText === `blocktitle-${sectionIdx}` && (
                   <Rect
-                    x={contentX - 4}
-                    y={blockTitleY - 4}
-                    width={contentW + 8}
+                    dash={[5, 5]}
                     height={s.blockTitleH + 8}
+                    listening={false}
                     stroke="#ff3333"
                     strokeWidth={2}
-                    dash={[5, 5]}
-                    listening={false}
+                    width={contentW + 8}
+                    x={contentX - 4}
+                    y={blockTitleY - 4}
                   />
                 )}
               </>
@@ -709,18 +727,20 @@ export function PageCanvas({
                   fontFamily={style.font.family}
                   fontSize={style.font.size}
                   fontStyle="bold"
+                  listening={!forExport}
                   text={s.section.title}
                   width={contentW}
                   x={contentX}
                   y={titleY}
-                  listening={!forExport}
-                  onMouseEnter={() => !forExport && setHoveredText(`title-${sectionIdx}`)}
-                  onMouseLeave={() => !forExport && setHoveredText(null)}
                   onClick={() => {
                     if (!forExport && onTextClick) {
-                      const node = textRefs.current.get(`section-${sectionIdx}-title`);
+                      const node = textRefs.current.get(
+                        `section-${sectionIdx}-title`,
+                      );
+
                       if (node) {
                         const absPos = node.getAbsolutePosition();
+
                         onTextClick({
                           path: `sections.${sectionIdx}.title`,
                           value: s.section.title || "",
@@ -733,18 +753,22 @@ export function PageCanvas({
                       }
                     }
                   }}
+                  onMouseEnter={() =>
+                    !forExport && setHoveredText(`title-${sectionIdx}`)
+                  }
+                  onMouseLeave={() => !forExport && setHoveredText(null)}
                 />
                 {/* 悬浮时的虚线边框 */}
                 {!forExport && hoveredText === `title-${sectionIdx}` && (
                   <Rect
-                    x={contentX - 4}
-                    y={titleY - 4}
-                    width={contentW + 8}
+                    dash={[5, 5]}
                     height={s.titleH + 8}
+                    listening={false}
                     stroke="#ff3333"
                     strokeWidth={2}
-                    dash={[5, 5]}
-                    listening={false}
+                    width={contentW + 8}
+                    x={contentX - 4}
+                    y={titleY - 4}
                   />
                 )}
               </>
@@ -755,8 +779,6 @@ export function PageCanvas({
               <>
                 <Group
                   listening={!forExport}
-                  onMouseEnter={() => !forExport && setHoveredText(`content-${sectionIdx}`)}
-                  onMouseLeave={() => !forExport && setHoveredText(null)}
                   onClick={() => {
                     if (!forExport && onTextClick) {
                       onTextClick({
@@ -770,16 +792,20 @@ export function PageCanvas({
                       });
                     }
                   }}
+                  onMouseEnter={() =>
+                    !forExport && setHoveredText(`content-${sectionIdx}`)
+                  }
+                  onMouseLeave={() => !forExport && setHoveredText(null)}
                 >
                   {/* 透明 Rect 用于捕获鼠标事件 */}
                   {!forExport && (
                     <Rect
+                      fill="transparent"
+                      height={s.contentH}
+                      listening={true}
+                      width={contentW}
                       x={contentX}
                       y={contentY}
-                      width={contentW}
-                      height={s.contentH}
-                      fill="transparent"
-                      listening={true}
                     />
                   )}
                   {(() => {
@@ -831,11 +857,11 @@ export function PageCanvas({
                           fontSize={style.font.size}
                           fontStyle={isBold ? "bold" : "normal"}
                           lineHeight={style.font.lineHeight}
+                          listening={false}
                           text={displayText}
                           width={contentW}
                           x={contentX}
                           y={currentY}
-                          listening={false}
                         />
                       );
                     });
@@ -844,14 +870,14 @@ export function PageCanvas({
                 {/* 悬浮时的虚线边框 */}
                 {!forExport && hoveredText === `content-${sectionIdx}` && (
                   <Rect
-                    x={contentX - 4}
-                    y={contentY - 4}
-                    width={contentW + 8}
+                    dash={[5, 5]}
                     height={s.contentH + 8}
+                    listening={false}
                     stroke="#ff3333"
                     strokeWidth={2}
-                    dash={[5, 5]}
-                    listening={false}
+                    width={contentW + 8}
+                    x={contentX - 4}
+                    y={contentY - 4}
                   />
                 )}
               </>
@@ -864,13 +890,13 @@ export function PageCanvas({
                 direction={direction}
                 fontFamily={style.font.family}
                 fontSize={style.font.size}
+                forExport={forExport}
+                maxImageHeight={tableImageSize}
                 table={s.section.table}
                 titleColor={style.titleColor}
                 width={contentW}
                 x={contentX}
                 y={tableY}
-                maxImageHeight={tableImageSize}
-                forExport={forExport}
                 onHeightMeasured={(h) => {
                   const key = `section-${sectionIdx}-table`;
 
@@ -886,6 +912,14 @@ export function PageCanvas({
                     return prev;
                   });
                 }}
+                onImageClick={(rowIdx, colIdx, currentImage) => {
+                  if (!forExport && onImageClick) {
+                    onImageClick({
+                      path: `sections.${sectionIdx}.table.rows.${rowIdx}.${colIdx}.image`,
+                      currentImage,
+                    });
+                  }
+                }}
                 onTextClick={(rowIdx, colIdx, value) => {
                   if (!forExport && onTextClick) {
                     onTextClick({
@@ -896,14 +930,6 @@ export function PageCanvas({
                       height: style.font.size * style.font.lineHeight,
                       fontSize: style.font.size,
                       multiline: false,
-                    });
-                  }
-                }}
-                onImageClick={(rowIdx, colIdx, currentImage) => {
-                  if (!forExport && onImageClick) {
-                    onImageClick({
-                      path: `sections.${sectionIdx}.table.rows.${rowIdx}.${colIdx}.image`,
-                      currentImage,
                     });
                   }
                 }}
@@ -982,6 +1008,20 @@ export function PageCanvas({
                               return prev;
                             });
                           }}
+                          onImageClick={() => {
+                            if (onImageClick) {
+                              const currentImage = s.rewards[rewardIdx].image;
+                              const imageUrl =
+                                typeof currentImage === "string"
+                                  ? currentImage
+                                  : currentImage?.url;
+
+                              onImageClick({
+                                path: `sections.${sectionIdx}.rewards.${rewardIdx}.image`,
+                                currentImage: imageUrl,
+                              });
+                            }
+                          }}
                           onTextClick={(field, value, pos) => {
                             if (onTextClick) {
                               onTextClick({
@@ -990,21 +1030,11 @@ export function PageCanvas({
                                 position: { x: pos.x, y: pos.y },
                                 width: pos.width,
                                 height: pos.height,
-                                fontSize: field === 'name' ? style.font.size : style.font.size - 2,
+                                fontSize:
+                                  field === "name"
+                                    ? style.font.size
+                                    : style.font.size - 2,
                                 multiline: false,
-                              });
-                            }
-                          }}
-                          onImageClick={() => {
-                            if (onImageClick) {
-                              const currentImage = s.rewards[rewardIdx].image;
-                              const imageUrl = typeof currentImage === 'string' 
-                                ? currentImage 
-                                : currentImage?.url;
-                              
-                              onImageClick({
-                                path: `sections.${sectionIdx}.rewards.${rewardIdx}.image`,
-                                currentImage: imageUrl,
                               });
                             }
                           }}

@@ -1,5 +1,14 @@
 import * as React from "react";
-import { Modal, ModalContent, ModalHeader, ModalBody, ModalFooter, Button, Input, Textarea } from "@heroui/react";
+import {
+  Modal,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalFooter,
+  Button,
+  Input,
+  Textarea,
+} from "@heroui/react";
 
 interface TextEditModalProps {
   isOpen: boolean;
@@ -32,47 +41,57 @@ export function TextEditModal({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !multiline && !e.shiftKey) {
+    if (e.key === "Enter" && !multiline && !e.shiftKey) {
       e.preventDefault();
       handleSave();
-    } else if (e.key === 'Escape') {
+    } else if (e.key === "Escape") {
       onClose();
     }
   };
 
+  // 使用 ref 在 Modal 打开时聚焦输入框
+  const inputRef = React.useRef<HTMLInputElement | HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    if (isOpen && inputRef.current) {
+      // 延迟聚焦，确保 Modal 已完全渲染
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    }
+  }, [isOpen]);
+
   return (
-    <Modal 
-      isOpen={isOpen} 
-      onClose={onClose}
-      size={large ? "3xl" : (multiline ? "lg" : "md")}
-      scrollBehavior="inside"
+    <Modal
       backdrop="blur"
+      isOpen={isOpen}
+      scrollBehavior="inside"
+      size={large ? "3xl" : multiline ? "lg" : "md"}
+      onClose={onClose}
     >
       <ModalContent>
-        <ModalHeader className="flex flex-col gap-1">
-          {title}
-        </ModalHeader>
+        <ModalHeader className="flex flex-col gap-1">{title}</ModalHeader>
         <ModalBody>
           {multiline ? (
             <Textarea
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              minRows={large ? 15 : 3}
-              maxRows={large ? 30 : 8}
-              placeholder="请输入内容"
+              ref={inputRef as React.Ref<HTMLTextAreaElement>}
               classNames={{
                 input: large ? "min-h-[400px]" : "min-h-[80px]",
               }}
-              autoFocus
-            />
-          ) : (
-            <Input
+              maxRows={large ? 30 : 8}
+              minRows={large ? 15 : 3}
+              placeholder="请输入内容"
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
               onKeyDown={handleKeyDown}
+            />
+          ) : (
+            <Input
+              ref={inputRef as React.Ref<HTMLInputElement>}
               placeholder="请输入内容"
-              autoFocus
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onKeyDown={handleKeyDown}
             />
           )}
         </ModalBody>
@@ -88,4 +107,3 @@ export function TextEditModal({
     </Modal>
   );
 }
-

@@ -34,7 +34,11 @@ export function TableComponent({
   maxImageHeight?: number;
   onHeightMeasured?: (height: number) => void;
   onTextClick?: (rowIdx: number, colIdx: number, value: string) => void;
-  onImageClick?: (rowIdx: number, colIdx: number, currentImage?: string) => void;
+  onImageClick?: (
+    rowIdx: number,
+    colIdx: number,
+    currentImage?: string,
+  ) => void;
   forExport?: boolean;
 }) {
   // 存储每个单元格文本节点的高度
@@ -43,9 +47,12 @@ export function TableComponent({
   );
   const textRefs = useRef<Map<string, Konva.Text>>(new Map());
   const imageRefs = useRef<Map<string, Konva.Image>>(new Map());
-  
+
   // 悬浮状态管理 - 存储当前悬浮的单元格 {rowIdx, colIdx}
-  const [hoveredCell, setHoveredCell] = useState<{row: number, col: number} | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<{
+    row: number;
+    col: number;
+  } | null>(null);
 
   // 存储已加载的图片
   const [loadedImages, setLoadedImages] = useState<
@@ -93,19 +100,21 @@ export function TableComponent({
 
   // 计算列数：从第一行推断总列数（考虑 colspan）
   let colCount = 0;
+
   if (table.rows.length > 0) {
     const firstRow = table.rows[0];
+
     for (const cell of firstRow) {
       colCount += cell.colspan || 1;
     }
   }
-  
+
   const colWidth = width / colCount;
   const cellPadding = 8;
   const minRowHeight = fontSize * 2;
   const textAlign = direction === "rtl" ? "right" : "left";
   const cornerRadius = 8; // 圆角半径
-  
+
   // 预先计算单元格布局（使用 useMemo 避免每次渲染都重新计算）
   const cellLayout = useMemo(() => {
     const layout: Array<{
@@ -115,33 +124,34 @@ export function TableComponent({
       rowspan: number;
       colspan: number;
     }> = [];
-    
+
     // 构建单元格占用矩阵
     const matrix: boolean[][] = [];
+
     for (let i = 0; i < table.rows.length; i++) {
       matrix[i] = new Array(colCount).fill(false);
     }
-    
+
     // 遍历所有行和单元格，计算每个单元格的实际列位置
     for (let rowIdx = 0; rowIdx < table.rows.length; rowIdx++) {
       const row = table.rows[rowIdx];
       let colIdx = 0;
-      
+
       for (let cellIdx = 0; cellIdx < row.length; cellIdx++) {
         const cell = row[cellIdx];
         const rowspan = cell.rowspan || 1;
         const colspan = cell.colspan || 1;
-        
+
         // 找到第一个未被占用的列
         while (colIdx < colCount && matrix[rowIdx][colIdx]) {
           colIdx++;
         }
-        
+
         // 如果列索引超出范围，跳过
         if (colIdx >= colCount) {
           continue;
         }
-        
+
         // 记录单元格位置
         layout.push({
           rowIdx,
@@ -150,19 +160,23 @@ export function TableComponent({
           rowspan,
           colspan,
         });
-        
+
         // 标记该单元格占用的所有位置
-        for (let r = rowIdx; r < rowIdx + rowspan && r < table.rows.length; r++) {
+        for (
+          let r = rowIdx;
+          r < rowIdx + rowspan && r < table.rows.length;
+          r++
+        ) {
           for (let c = colIdx; c < colIdx + colspan && c < colCount; c++) {
             matrix[r][c] = true;
           }
         }
-        
+
         // 移动到下一列
         colIdx += colspan;
       }
     }
-    
+
     return { layout, matrix };
   }, [table.rows, colCount]);
 
@@ -248,6 +262,7 @@ export function TableComponent({
     if (!hasMeasuredCells) {
       // 检查是否有图片单元格
       let hasImages = false;
+
       for (const row of table.rows) {
         for (const cell of row) {
           if (cell.is_image) {
@@ -257,7 +272,7 @@ export function TableComponent({
         }
         if (hasImages) break;
       }
-      
+
       // 如果有图片，使用图片最大高度估算
       // 否则使用文本估算
       maxHeight = hasImages ? maxImageHeight : minRowHeight;
@@ -313,10 +328,10 @@ export function TableComponent({
                 isFirstRow && isLastRow
                   ? cornerRadius
                   : isFirstRow
-                  ? [cornerRadius, cornerRadius, 0, 0]
-                  : isLastRow
-                  ? [0, 0, cornerRadius, cornerRadius]
-                  : 0
+                    ? [cornerRadius, cornerRadius, 0, 0]
+                    : isLastRow
+                      ? [0, 0, cornerRadius, cornerRadius]
+                      : 0
               }
               fill="rgba(255, 255, 255, 0.1)"
               height={rowH}
@@ -329,234 +344,262 @@ export function TableComponent({
             {cellLayout.layout
               .filter((item) => item.rowIdx === rowIdx)
               .map((item) => {
-              const cell = row[item.cellIdx];
-              const { colIdx, rowspan, colspan } = item;
-              const actualColIdx = item.cellIdx; // 原始数组中的列索引
-              
-              const key = `${rowIdx}-${item.cellIdx}`;
-              const cellX = colIdx * colWidth;
-              const cellWidth = colWidth * colspan;
-              
-              // 计算跨行单元格的总高度
-              let cellHeight = 0;
-              for (let r = rowIdx; r < rowIdx + rowspan && r < table.rows.length; r++) {
-                const rowPos = rowPositions[r];
-                if (rowPos) {
-                  cellHeight += rowPos.height;
+                const cell = row[item.cellIdx];
+                const { colIdx, rowspan, colspan } = item;
+                const actualColIdx = item.cellIdx; // 原始数组中的列索引
+
+                const key = `${rowIdx}-${item.cellIdx}`;
+                const cellX = colIdx * colWidth;
+                const cellWidth = colWidth * colspan;
+
+                // 计算跨行单元格的总高度
+                let cellHeight = 0;
+
+                for (
+                  let r = rowIdx;
+                  r < rowIdx + rowspan && r < table.rows.length;
+                  r++
+                ) {
+                  const rowPos = rowPositions[r];
+
+                  if (rowPos) {
+                    cellHeight += rowPos.height;
+                  }
                 }
-              }
 
-              // 如果是图片
-              if (cell.is_image && cell.image) {
-                const bmp = loadedImages.get(key);
+                // 如果是图片
+                if (cell.is_image && cell.image) {
+                  const bmp = loadedImages.get(key);
 
-                if (bmp) {
-                  // 计算图片尺寸：尽量充满单元格，保持比例，留间距
-                  // 添加最大高度限制
-                  const maxImgWidth = cellWidth - cellPadding * 2;
-                  const maxImgHeight = Math.min(cellHeight - cellPadding * 2, maxImageHeight);
+                  if (bmp) {
+                    // 计算图片尺寸：尽量充满单元格，保持比例，留间距
+                    // 添加最大高度限制
+                    const maxImgWidth = cellWidth - cellPadding * 2;
+                    const maxImgHeight = Math.min(
+                      cellHeight - cellPadding * 2,
+                      maxImageHeight,
+                    );
 
-                  // 获取图片的原始尺寸
-                  const originalW = (bmp as any).width || 1;
-                  const originalH = (bmp as any).height || 1;
-                  const imgAspect = originalW / originalH;
+                    // 获取图片的原始尺寸
+                    const originalW = (bmp as any).width || 1;
+                    const originalH = (bmp as any).height || 1;
+                    const imgAspect = originalW / originalH;
 
-                  let imgW = maxImgWidth;
-                  let imgH = imgW / imgAspect;
+                    let imgW = maxImgWidth;
+                    let imgH = imgW / imgAspect;
 
-                  // 如果高度超出，按高度缩放
-                  if (imgH > maxImgHeight) {
-                    imgH = maxImgHeight;
-                    imgW = imgH * imgAspect;
+                    // 如果高度超出，按高度缩放
+                    if (imgH > maxImgHeight) {
+                      imgH = maxImgHeight;
+                      imgW = imgH * imgAspect;
+                    }
+
+                    // 居中显示图片（水平和垂直都居中）
+                    const imgX = cellX + (cellWidth - imgW) / 2;
+                    const imgY = rowY + (cellHeight - imgH) / 2;
+
+                    const isHovered =
+                      !forExport &&
+                      hoveredCell?.row === rowIdx &&
+                      hoveredCell?.col === actualColIdx;
+
+                    return (
+                      <Group key={key}>
+                        {/* 透明热区 - 覆盖整个单元格 */}
+                        <Rect
+                          fill="transparent"
+                          height={cellHeight}
+                          listening={!forExport}
+                          width={cellWidth}
+                          x={cellX}
+                          y={rowY}
+                          onClick={() => {
+                            if (!forExport && onImageClick) {
+                              const imageUrl =
+                                typeof cell.image === "string"
+                                  ? cell.image
+                                  : cell.image?.url;
+
+                              onImageClick(rowIdx, actualColIdx, imageUrl);
+                            }
+                          }}
+                          onMouseEnter={() =>
+                            !forExport &&
+                            setHoveredCell({ row: rowIdx, col: actualColIdx })
+                          }
+                          onMouseLeave={() =>
+                            !forExport && setHoveredCell(null)
+                          }
+                        />
+                        {/* 图片内容 */}
+                        <KImage
+                          ref={(node) => {
+                            if (node) {
+                              imageRefs.current.set(key, node);
+                            } else {
+                              imageRefs.current.delete(key);
+                            }
+                          }}
+                          height={imgH}
+                          image={bmp as any}
+                          listening={false}
+                          width={imgW}
+                          x={imgX}
+                          y={imgY}
+                        />
+                        {/* 悬浮边框 */}
+                        {isHovered && (
+                          <Rect
+                            dash={[5, 5]}
+                            height={cellHeight - 2}
+                            listening={false}
+                            stroke="#ff3333"
+                            strokeWidth={2}
+                            width={cellWidth - 2}
+                            x={cellX + 1}
+                            y={rowY + 1}
+                          />
+                        )}
+                      </Group>
+                    );
                   }
 
-                  // 居中显示图片（水平和垂直都居中）
-                  const imgX = cellX + (cellWidth - imgW) / 2;
-                  const imgY = rowY + (cellHeight - imgH) / 2;
-
-                  const isHovered = !forExport && hoveredCell?.row === rowIdx && hoveredCell?.col === actualColIdx;
-                  
-                  return (
-                    <Group key={key}>
-                      {/* 透明热区 - 覆盖整个单元格 */}
-                      <Rect
-                        x={cellX}
-                        y={rowY}
-                        width={cellWidth}
-                        height={cellHeight}
-                        fill="transparent"
-                        listening={!forExport}
-                        onMouseEnter={() => !forExport && setHoveredCell({row: rowIdx, col: actualColIdx})}
-                        onMouseLeave={() => !forExport && setHoveredCell(null)}
-                        onClick={() => {
-                          if (!forExport && onImageClick) {
-                            const imageUrl = typeof cell.image === 'string' ? cell.image : cell.image?.url;
-                            onImageClick(rowIdx, actualColIdx, imageUrl);
-                          }
-                        }}
-                      />
-                      {/* 图片内容 */}
-                      <KImage
-                        ref={(node) => {
-                          if (node) {
-                            imageRefs.current.set(key, node);
-                          } else {
-                            imageRefs.current.delete(key);
-                          }
-                        }}
-                        height={imgH}
-                        image={bmp as any}
-                        width={imgW}
-                        x={imgX}
-                        y={imgY}
-                        listening={false}
-                      />
-                      {/* 悬浮边框 */}
-                      {isHovered && (
-                        <Rect
-                          x={cellX + 1}
-                          y={rowY + 1}
-                          width={cellWidth - 2}
-                          height={cellHeight - 2}
-                          stroke="#ff3333"
-                          strokeWidth={2}
-                          dash={[5, 5]}
-                          listening={false}
-                        />
-                      )}
-                    </Group>
-                  );
+                  // 图片加载中或未加载，返回空占位
+                  return null;
                 }
 
-                // 图片加载中或未加载，返回空占位
-                return null;
-              }
+                // 文字内容
+                const textHeight = cellHeights.get(key) || 0;
+                const verticalOffset = (cellHeight - textHeight) / 2;
 
-              // 文字内容
-              const textHeight = cellHeights.get(key) || 0;
-              const verticalOffset = (cellHeight - textHeight) / 2;
-              
-              // 根据单元格格式应用样式
-              const cellAlign = cell.center ? "center" : textAlign;
-              const cellFontStyle = cell.bold ? "bold" : "normal";
-              const cellColor = cell.bold ? titleColor : contentColor;
-              
-              const isHovered = !forExport && hoveredCell?.row === rowIdx && hoveredCell?.col === actualColIdx;
+                // 根据单元格格式应用样式
+                const cellAlign = cell.center ? "center" : textAlign;
+                const cellFontStyle = cell.bold ? "bold" : "normal";
+                const cellColor = cell.bold ? titleColor : contentColor;
 
-              return (
-                <Group key={key}>
-                  {/* 透明热区 - 覆盖整个单元格 */}
-                  <Rect
-                    x={cellX}
-                    y={rowY}
-                    width={cellWidth}
-                    height={cellHeight}
-                    fill="transparent"
-                    listening={!forExport}
-                    onMouseEnter={() => !forExport && setHoveredCell({row: rowIdx, col: actualColIdx})}
-                    onMouseLeave={() => !forExport && setHoveredCell(null)}
-                    onClick={() => {
-                      if (!forExport && onTextClick) {
-                        onTextClick(rowIdx, actualColIdx, cell.value);
-                      }
-                    }}
-                  />
-                  {/* 文字内容 */}
-                  <Text
-                    ref={(node) => {
-                      if (node) {
-                        textRefs.current.set(key, node);
-                      } else {
-                        textRefs.current.delete(key);
-                      }
-                    }}
-                    align={cellAlign}
-                    direction={direction}
-                    fill={cellColor}
-                    fontFamily={fontFamily}
-                    fontSize={fontSize}
-                    fontStyle={cellFontStyle}
-                    text={cell.value}
-                    verticalAlign="top"
-                    width={cellWidth - cellPadding * 2}
-                    wrap="word"
-                    x={cellX + cellPadding}
-                    y={rowY + Math.max(cellPadding, verticalOffset)}
-                    listening={false}
-                  />
-                  {/* 悬浮边框 */}
-                  {isHovered && (
+                const isHovered =
+                  !forExport &&
+                  hoveredCell?.row === rowIdx &&
+                  hoveredCell?.col === actualColIdx;
+
+                return (
+                  <Group key={key}>
+                    {/* 透明热区 - 覆盖整个单元格 */}
                     <Rect
-                      x={cellX + 1}
-                      y={rowY + 1}
-                      width={cellWidth - 2}
-                      height={cellHeight - 2}
-                      stroke="#ff3333"
-                      strokeWidth={2}
-                      dash={[5, 5]}
-                      listening={false}
+                      fill="transparent"
+                      height={cellHeight}
+                      listening={!forExport}
+                      width={cellWidth}
+                      x={cellX}
+                      y={rowY}
+                      onClick={() => {
+                        if (!forExport && onTextClick) {
+                          onTextClick(rowIdx, actualColIdx, cell.value);
+                        }
+                      }}
+                      onMouseEnter={() =>
+                        !forExport &&
+                        setHoveredCell({ row: rowIdx, col: actualColIdx })
+                      }
+                      onMouseLeave={() => !forExport && setHoveredCell(null)}
                     />
-                  )}
-                </Group>
-              );
-            })}
+                    {/* 文字内容 */}
+                    <Text
+                      ref={(node) => {
+                        if (node) {
+                          textRefs.current.set(key, node);
+                        } else {
+                          textRefs.current.delete(key);
+                        }
+                      }}
+                      align={cellAlign}
+                      direction={direction}
+                      fill={cellColor}
+                      fontFamily={fontFamily}
+                      fontSize={fontSize}
+                      fontStyle={cellFontStyle}
+                      listening={false}
+                      text={cell.value}
+                      verticalAlign="top"
+                      width={cellWidth - cellPadding * 2}
+                      wrap="word"
+                      x={cellX + cellPadding}
+                      y={rowY + Math.max(cellPadding, verticalOffset)}
+                    />
+                    {/* 悬浮边框 */}
+                    {isHovered && (
+                      <Rect
+                        dash={[5, 5]}
+                        height={cellHeight - 2}
+                        listening={false}
+                        stroke="#ff3333"
+                        strokeWidth={2}
+                        width={cellWidth - 2}
+                        x={cellX + 1}
+                        y={rowY + 1}
+                      />
+                    )}
+                  </Group>
+                );
+              })}
 
             {/* 行分割线 - 分段绘制，跳过合并单元格 */}
-            {!isLastRow && (() => {
-              const segments: Array<{ start: number; end: number }> = [];
-              let segmentStart: number | null = null;
-              
-              // 遍历所有列，找出不跨行的区段
-              for (let c = 0; c < colCount; c++) {
-                const currentRowHasCell = cellLayout.matrix[rowIdx][c];
-                const nextRowHasCell = cellLayout.matrix[rowIdx + 1][c];
-                
-                // 检查该列在当前行是否有跨到下一行的单元格
-                let hasRowspan = false;
-                for (const item of cellLayout.layout) {
-                  if (item.rowIdx === rowIdx && 
-                      item.colIdx <= c && 
+            {!isLastRow &&
+              (() => {
+                const segments: Array<{ start: number; end: number }> = [];
+                let segmentStart: number | null = null;
+
+                // 遍历所有列，找出不跨行的区段
+                for (let c = 0; c < colCount; c++) {
+                  // 检查该列在当前行是否有跨到下一行的单元格
+                  let hasRowspan = false;
+
+                  for (const item of cellLayout.layout) {
+                    if (
+                      item.rowIdx === rowIdx &&
+                      item.colIdx <= c &&
                       c < item.colIdx + item.colspan &&
-                      item.rowspan > 1) {
-                    hasRowspan = true;
-                    break;
+                      item.rowspan > 1
+                    ) {
+                      hasRowspan = true;
+                      break;
+                    }
+                  }
+
+                  if (!hasRowspan) {
+                    // 该列不跨行，可以绘制分割线
+                    if (segmentStart === null) {
+                      segmentStart = c;
+                    }
+                  } else {
+                    // 该列跨行，结束当前区段
+                    if (segmentStart !== null) {
+                      segments.push({ start: segmentStart, end: c });
+                      segmentStart = null;
+                    }
                   }
                 }
-                
-                if (!hasRowspan) {
-                  // 该列不跨行，可以绘制分割线
-                  if (segmentStart === null) {
-                    segmentStart = c;
-                  }
-                } else {
-                  // 该列跨行，结束当前区段
-                  if (segmentStart !== null) {
-                    segments.push({ start: segmentStart, end: c });
-                    segmentStart = null;
-                  }
+
+                // 处理最后一个区段
+                if (segmentStart !== null) {
+                  segments.push({ start: segmentStart, end: colCount });
                 }
-              }
-              
-              // 处理最后一个区段
-              if (segmentStart !== null) {
-                segments.push({ start: segmentStart, end: colCount });
-              }
-              
-              // 绘制所有区段
-              return segments.map((seg, idx) => (
-                <Line
-                  key={`row-hline-${rowIdx}-${idx}`}
-                  points={[
-                    seg.start * colWidth,
-                    rowY + rowH,
-                    seg.end * colWidth,
-                    rowY + rowH,
-                  ]}
-                  stroke="rgba(0, 0, 0, 0.3)"
-                  strokeWidth={1}
-                />
-              ));
-            })()}
+
+                // 绘制所有区段
+                return segments.map((seg, idx) => (
+                  <Line
+                    key={`row-hline-${rowIdx}-${idx}`}
+                    points={[
+                      seg.start * colWidth,
+                      rowY + rowH,
+                      seg.end * colWidth,
+                      rowY + rowH,
+                    ]}
+                    stroke="rgba(0, 0, 0, 0.3)"
+                    strokeWidth={1}
+                  />
+                ));
+              })()}
 
             {/* 列分割线 - 只在当前行的列边界绘制，跳过跨列单元格 */}
             {cellLayout.layout
@@ -564,7 +607,7 @@ export function TableComponent({
               .map((item) => {
                 // 在单元格左侧绘制分割线
                 const colIdx = item.colIdx;
-                
+
                 return (
                   <Line
                     key={`row-vline-${rowIdx}-${colIdx}`}

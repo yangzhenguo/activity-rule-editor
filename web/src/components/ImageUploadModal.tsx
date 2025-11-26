@@ -21,7 +21,9 @@ export function ImageUploadModal({
   onClose,
   onSave,
 }: ImageUploadModalProps) {
-  const [previewImage, setPreviewImage] = useState<string | null>(currentImage || null);
+  const [previewImage, setPreviewImage] = useState<string | null>(
+    currentImage || null,
+  );
   const [isDragging, setIsDragging] = useState(false);
 
   // 当 Modal 打开时，同步 currentImage 到 previewImage
@@ -34,25 +36,31 @@ export function ImageUploadModal({
   const handleFileSelect = useCallback((file: File) => {
     if (!file.type.startsWith("image/")) {
       alert("请上传图片文件");
+
       return;
     }
 
     const reader = new FileReader();
+
     reader.onload = (e) => {
       setPreviewImage(e.target?.result as string);
     };
     reader.readAsDataURL(file);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
 
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFileSelect(file);
-    }
-  }, [handleFileSelect]);
+      const file = e.dataTransfer.files[0];
+
+      if (file) {
+        handleFileSelect(file);
+      }
+    },
+    [handleFileSelect],
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -65,10 +73,12 @@ export function ImageUploadModal({
 
   const handleClickUpload = useCallback(() => {
     const input = document.createElement("input");
+
     input.type = "file";
     input.accept = "image/*";
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
+
       if (file) {
         handleFileSelect(file);
       }
@@ -89,12 +99,7 @@ export function ImageUploadModal({
   }, [currentImage, onClose]);
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleCancel}
-      size="2xl"
-      backdrop="blur"
-    >
+    <Modal backdrop="blur" isOpen={isOpen} size="2xl" onClose={handleCancel}>
       <ModalContent>
         <ModalHeader>
           <h3 className="text-xl font-bold">替换图片</h3>
@@ -102,37 +107,41 @@ export function ImageUploadModal({
         <ModalBody>
           <div
             className={`
-              relative border-2 border-dashed rounded-lg p-8 
+              relative border-2 border-dashed rounded-lg p-8
               flex flex-col items-center justify-center
               min-h-[300px] transition-colors cursor-pointer
-              ${isDragging 
-                ? "border-primary bg-primary-50" 
-                : "border-gray-300 hover:border-primary hover:bg-gray-50"
+              ${
+                isDragging
+                  ? "border-primary bg-primary-50"
+                  : "border-gray-300 hover:border-primary hover:bg-gray-50"
               }
             `}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
+            role="button"
+            tabIndex={0}
             onClick={handleClickUpload}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleClickUpload();
+              }
+            }}
           >
             {previewImage ? (
               <div className="relative w-full h-full flex items-center justify-center">
                 <img
-                  src={previewImage}
                   alt="预览"
                   className="max-w-full max-h-[400px] object-contain rounded"
+                  src={previewImage}
                 />
-                <div
-                  className="absolute bottom-2 right-2"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleClickUpload();
-                  }}
-                >
+                <div className="absolute bottom-2 right-2">
                   <Button
-                    size="sm"
                     color="primary"
+                    size="sm"
                     variant="flat"
+                    onPress={handleClickUpload}
                   >
                     更换图片
                   </Button>
@@ -157,8 +166,8 @@ export function ImageUploadModal({
           </Button>
           <Button
             color="primary"
-            onPress={handleSave}
             isDisabled={!previewImage}
+            onPress={handleSave}
           >
             保存
           </Button>
@@ -167,4 +176,3 @@ export function ImageUploadModal({
     </Modal>
   );
 }
-
