@@ -8,6 +8,7 @@ import {
   useState,
   memo,
   useDeferredValue,
+  useMemo,
 } from "react";
 import { Stage, Layer } from "react-konva";
 import {
@@ -22,12 +23,15 @@ import {
   Tabs,
   Tab,
   Skeleton,
+  Slider,
 } from "@heroui/react";
 
 import { PageCanvas } from "@/renderer/canvas/PageCanvas";
-import { exportPagesToPng } from "@/renderer/canvas";
+import { exportPagesToPng, renderPageToDataURL } from "@/renderer/canvas";
 import { savePngsMultiSheet } from "@/utils/file";
 import { DragDropZone } from "@/components/DragDropZone";
+import { ImageUploadModal } from "@/components/ImageUploadModal";
+import { TextEditModal } from "@/components/TextEditModal";
 
 function defaultStyle(): StyleCfg {
   return {
@@ -90,13 +94,23 @@ const CanvasCell = memo(
     style,
     zoomPct,
     estHeight,
+    pixelRatio,
     onMeasured,
+    onDownload,
+    onTextClick,
+    onImageClick,
+    tableImageSize,
   }: {
     page: any;
     style: StyleCfg;
     zoomPct: number;
     estHeight: number;
+    pixelRatio: number;
     onMeasured: (h: number) => void;
+    onDownload: () => void;
+    onTextClick: (info: any) => void;
+    onImageClick: (info: any) => void;
+    tableImageSize: number;
   }) {
     // 固定基准尺寸
     const baseWidth = style.pageWidth;
@@ -107,7 +121,9 @@ const CanvasCell = memo(
 
     // 使用 Intersection Observer 检测可见性
     const containerRef = useRef<HTMLDivElement>(null);
+    const stageRef = useRef<any>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
 
     useEffect(() => {
       const element = containerRef.current;
@@ -155,6 +171,8 @@ const CanvasCell = memo(
             boxShadow: "0 1px 3px rgba(0,0,0,.1)",
             overflow: "hidden",
           }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
         >
           {/* 骨架屏占位 - 固定尺寸 */}
           <div className="absolute inset-0 bg-gray-50">
@@ -166,18 +184,49 @@ const CanvasCell = memo(
           {/* ✅ 只有可见时才挂载 Konva Stage */}
           {isVisible && (
             <Stage
+              ref={stageRef}
               height={baseHeight}
-              listening={false}
+              listening={true}
               pixelRatio={1}
               scaleX={scale}
               scaleY={scale}
               style={{ position: "absolute", inset: 0 }}
               width={baseWidth}
             >
-              <Layer listening={false} perfectDrawEnabled={false}>
-                <PageCanvas page={page} style={style} onMeasured={onMeasured} />
+              <Layer listening={true} perfectDrawEnabled={false}>
+                <PageCanvas 
+                  page={page} 
+                  style={style} 
+                  onMeasured={onMeasured}
+                  onTextClick={(info) => onTextClick(info)}
+                  onImageClick={onImageClick}
+                  tableImageSize={tableImageSize}
+                />
               </Layer>
             </Stage>
+          )}
+
+          {/* 悬浮时显示下载按钮 */}
+          {isHovered && (
+            <div
+              style={{
+                position: "absolute",
+                top: 8,
+                right: 8,
+                zIndex: 10,
+              }}
+            >
+              <Button
+                isIconOnly
+                size="sm"
+                color="success"
+                variant="shadow"
+                onPress={onDownload}
+                aria-label="下载"
+              >
+                ⬇️
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -190,7 +239,8 @@ const CanvasCell = memo(
       a.page === b.page &&
       a.zoomPct === b.zoomPct &&
       heightDiff < 5 &&
-      a.style === b.style
+      a.style === b.style &&
+      a.tableImageSize === b.tableImageSize
     );
   },
 );
@@ -270,6 +320,27 @@ export default function PreviewPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [heights, setHeights] = useState<number[]>([]);
+  const [tableImageSize, setTableImageSize] = useState(120); // 表格图片大小
+  const [uploadedDataFile, setUploadedDataFile] = useState<{name: string, type: string} | null>(null); // 已上传的数据文件
+  const [uploadedBorderFile, setUploadedBorderFile] = useState<string | null>(null); // 已上传的边框图文件名
+
+  // 编辑功能状态
+  const [editingText, setEditingText] = useState<{
+    pageIndex: number;
+    path: string;
+    value: string;
+    position: { x: number; y: number };
+    width: number;
+    height: number;
+    fontSize: number;
+    multiline: boolean;
+  } | null>(null);
+
+  const [editingImage, setEditingImage] = useState<{
+    pageIndex: number;
+    path: string;
+    currentImage?: string;
+  } | null>(null);
 
   // 阶段化导出进度跟踪
   const [exportPhase, setExportPhase] = useState<ExportPhase | null>(null);
@@ -311,6 +382,7 @@ export default function PreviewPage() {
         "【调试】用户上传 JSON 内容:\n" + JSON.stringify(json, null, 2),
       );
       setData(json);
+      setUploadedDataFile({ name: file.name, type: 'json' });
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -376,6 +448,7 @@ export default function PreviewPage() {
           payload.skipped_sheets,
         );
       }
+      setUploadedDataFile({ name: file.name, type: 'xlsx' });
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
@@ -416,9 +489,26 @@ export default function PreviewPage() {
       });
 
       setStyle((s) => ({ ...s, border: { ...s.border, image: d } }));
+      setUploadedBorderFile(file.name);
     } finally {
       URL.revokeObjectURL(blobUrl);
     }
+  }, []);
+
+  // 删除数据文件
+  const onDeleteDataFile = useCallback(() => {
+    setData({ pages: [] });
+    setAllSheets(new Map());
+    setSheetNames([]);
+    setCurrentSheet("");
+    setUploadedDataFile(null);
+    setError(null);
+  }, []);
+
+  // 删除边框图
+  const onDeleteBorderFile = useCallback(() => {
+    setStyle((s) => ({ ...s, border: { ...s.border, image: "" } }));
+    setUploadedBorderFile(null);
   }, []);
 
   // Sheet 切换处理 - 简单清理即可，虚拟化会自动处理
@@ -434,6 +524,208 @@ export default function PreviewPage() {
     },
     [allSheets],
   );
+
+  // 处理文字点击
+  const handleTextClick = useCallback((pageIndex: number, info: any) => {
+    // 根据路径判断编辑的是什么内容
+    let title = "编辑文字";
+    let large = false;
+    
+    if (info.path.includes(".table.rows.")) {
+      title = "编辑表格单元格";
+    } else if (info.path.includes(".content")) {
+      title = "编辑规则内容";
+      large = true; // 规则页内容用大文本框
+    } else if (info.path.includes("._blockTitle")) {
+      title = "编辑区块标题";
+    } else if (info.path.includes(".title")) {
+      title = "编辑标题";
+    } else if (info.path.includes(".rewards.")) {
+      if (info.path.endsWith(".name")) {
+        title = "编辑奖励名称";
+      } else if (info.path.endsWith(".desc")) {
+        title = "编辑奖励描述";
+      }
+    }
+    
+    setEditingText({
+      pageIndex,
+      path: info.path,
+      value: info.value,
+      multiline: info.multiline,
+      title,
+      large,
+    });
+  }, []);
+
+  // 处理图片点击
+  const handleImageClick = useCallback((pageIndex: number, info: any) => {
+    setEditingImage({
+      pageIndex,
+      ...info,
+    });
+  }, []);
+
+  // 保存文字编辑
+  const handleTextSave = useCallback((newValue: string) => {
+    if (!editingText) return;
+
+    const newData = JSON.parse(JSON.stringify(data));
+    const page = newData.pages[editingText.pageIndex];
+    
+    // 解析路径：sections.0.title 或 sections.0.rewards.1.name
+    const pathParts = editingText.path.split('.');
+    
+    // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
+    if (page.blocks && pathParts[0] === 'sections') {
+      const sectionIdx = Number(pathParts[1]);
+      
+      // 找到这个 section 属于哪个 block
+      let currentSectionCount = 0;
+      for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+        const block = page.blocks[blockIdx];
+        const sectionsInBlock = block.sections.length;
+        
+        if (currentSectionCount + sectionsInBlock > sectionIdx) {
+          // 找到了对应的 block
+          const sectionInBlockIdx = sectionIdx - currentSectionCount;
+          
+          // 构建新路径
+          let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
+          
+          // 处理剩余路径 (title, content, rewards.X.name等)
+          for (let i = 2; i < pathParts.length - 1; i++) {
+            const key = pathParts[i];
+            if (!isNaN(Number(pathParts[i + 1]))) {
+              target = target[key][Number(pathParts[++i])];
+            } else {
+              target = target[key];
+            }
+          }
+          
+          target[pathParts[pathParts.length - 1]] = newValue;
+          break;
+        }
+        
+        currentSectionCount += sectionsInBlock;
+      }
+    } else {
+      // 旧结构或直接 sections，直接更新
+      let target: any = page;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const key = pathParts[i];
+        if (!isNaN(Number(pathParts[i + 1]))) {
+          target = target[key][Number(pathParts[++i])];
+        } else {
+          target = target[key];
+        }
+      }
+      target[pathParts[pathParts.length - 1]] = newValue;
+    }
+
+    setData(newData);
+    
+    // 同步到 allSheets
+    const newSheets = new Map(allSheets);
+    newSheets.set(currentSheet, newData);
+    setAllSheets(newSheets);
+
+    setEditingText(null);
+    console.log("✓ 文字已保存:", newValue);
+  }, [editingText, data, allSheets, currentSheet]);
+
+  // 保存图片替换
+  const handleImageSave = useCallback((imageDataUrl: string) => {
+    if (!editingImage) return;
+
+    const newData = JSON.parse(JSON.stringify(data));
+    const page = newData.pages[editingImage.pageIndex];
+    
+    // 解析路径：sections.0.rewards.1.image
+    const pathParts = editingImage.path.split('.');
+    
+    // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
+    if (page.blocks && pathParts[0] === 'sections') {
+      const sectionIdx = Number(pathParts[1]);
+      
+      // 找到这个 section 属于哪个 block
+      let currentSectionCount = 0;
+      for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+        const block = page.blocks[blockIdx];
+        const sectionsInBlock = block.sections.length;
+        
+        if (currentSectionCount + sectionsInBlock > sectionIdx) {
+          // 找到了对应的 block
+          const sectionInBlockIdx = sectionIdx - currentSectionCount;
+          
+          // 构建新路径
+          let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
+          
+          // 处理剩余路径 (rewards.X.image)
+          for (let i = 2; i < pathParts.length - 1; i++) {
+            const key = pathParts[i];
+            if (!isNaN(Number(pathParts[i + 1]))) {
+              target = target[key][Number(pathParts[++i])];
+            } else {
+              target = target[key];
+            }
+          }
+          
+          target[pathParts[pathParts.length - 1]] = imageDataUrl;
+          break;
+        }
+        
+        currentSectionCount += sectionsInBlock;
+      }
+    } else {
+      // 旧结构或直接 sections，直接更新
+      let target: any = page;
+      for (let i = 0; i < pathParts.length - 1; i++) {
+        const key = pathParts[i];
+        if (!isNaN(Number(pathParts[i + 1]))) {
+          target = target[key][Number(pathParts[++i])];
+        } else {
+          target = target[key];
+        }
+      }
+      target[pathParts[pathParts.length - 1]] = imageDataUrl;
+    }
+
+    setData(newData);
+    
+    // 同步到 allSheets
+    const newSheets = new Map(allSheets);
+    newSheets.set(currentSheet, newData);
+    setAllSheets(newSheets);
+
+    setEditingImage(null);
+    console.log("✓ 图片已保存");
+  }, [editingImage, data, allSheets, currentSheet]);
+
+  // 下载单个页面
+  const onDownloadPage = useCallback(async (pageIndex: number) => {
+    try {
+      const page = data.pages[pageIndex];
+      const dataUrl = await renderPageToDataURL(page, debouncedStyle, pixelRatio);
+      
+      // 使用 page.region 作为文件名
+      const regionName = page.region || `page-${pageIndex + 1}`;
+      const sanitizedName = regionName.replace(/[<>:"/\\|?*]/g, "_");
+      const fileName = `${sanitizedName}.png`;
+
+      // 触发下载
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+
+      console.log(`✓ 已下载: ${fileName}`);
+    } catch (e: any) {
+      alert(`下载失败: ${e?.message ?? String(e)}`);
+    }
+  }, [data, debouncedStyle, pixelRatio]);
 
   const onExport = useCallback(async () => {
     setLoading(true);
@@ -583,6 +875,32 @@ export default function PreviewPage() {
   // 判断是否显示多 sheet 导航
   const isMultiSheet = sheetNames.length > 1;
 
+  // 检查当前页面是否有表格且表格中是否有图片
+  const hasTableWithImages = useMemo(() => {
+    if (!data.pages || data.pages.length === 0) return false;
+    
+    for (const page of data.pages) {
+      const sections = page.blocks 
+        ? page.blocks.flatMap(block => block.sections || [])
+        : page.sections || [];
+      
+      for (const section of sections) {
+        if (section.table?.rows) {
+          // 检查表格中是否有图片
+          for (const row of section.table.rows) {
+            for (const cell of row) {
+              if (cell.is_image && cell.image) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return false;
+  }, [data]);
+
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       {/* 左侧固定控制区 */}
@@ -600,14 +918,45 @@ export default function PreviewPage() {
         <ScrollShadow className="w-full" style={{ flex: 1, padding: 16 }}>
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <h3 className="text-sm font-medium mb-4 text-gray-900">上传数据</h3>
-            <DragDropZone
-              accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-              description="点击选择或拖拽文件到此处"
-              icon="📁"
-              label="选择 JSON 或 XLSX 文件"
-              loading={loading}
-              onFile={onPickDataFile}
-            />
+            {uploadedDataFile ? (
+              <div className="relative border-2 border-gray-200 rounded-lg p-4 bg-gray-50 min-h-[120px] flex items-center">
+                <Button
+                  isIconOnly
+                  size="sm"
+                  color="danger"
+                  variant="flat"
+                  className="absolute top-2 right-2"
+                  onPress={onDeleteDataFile}
+                  aria-label="删除文件"
+                >
+                  ✕
+                </Button>
+                <div className="flex items-center gap-3 pr-8 w-full">
+                  <div className="text-4xl">
+                    {uploadedDataFile.type === 'xlsx' ? '📊' : '📄'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {uploadedDataFile.name}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {uploadedDataFile.type === 'xlsx' ? 'Excel 表格' : 'JSON 文件'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="min-h-[120px]">
+                <DragDropZone
+                  accept=".json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  description="点击选择或拖拽文件到此处"
+                  icon="📁"
+                  label="选择 JSON 或 XLSX 文件"
+                  loading={loading}
+                  onFile={onPickDataFile}
+                />
+              </div>
+            )}
             {error ? (
               <div className="text-xs text-red-600 mt-3">{error}</div>
             ) : null}
@@ -617,14 +966,51 @@ export default function PreviewPage() {
             <h3 className="text-sm font-medium mb-4 text-gray-900">
               边框图 & 切片
             </h3>
-            <DragDropZone
-              accept="image/*"
-              description="点击选择或拖拽图片到此处"
-              icon="🖼️"
-              label="选择边框图片"
-              loading={loading}
-              onFile={onPickBorder}
-            />
+            {uploadedBorderFile ? (
+              <div className="relative border-2 border-gray-200 rounded-lg p-3 bg-gray-50 min-h-[120px] flex items-center">
+                <Button
+                  isIconOnly
+                  size="sm"
+                  color="danger"
+                  variant="flat"
+                  className="absolute top-2 right-2 z-10"
+                  onPress={onDeleteBorderFile}
+                  aria-label="删除边框图"
+                >
+                  ✕
+                </Button>
+                <div className="flex items-center gap-3 pr-8 w-full">
+                  {style.border.image && (
+                    <div className="w-16 h-16 flex-shrink-0 rounded overflow-hidden border border-gray-200">
+                      <img
+                        src={style.border.image}
+                        alt="边框图预览"
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {uploadedBorderFile}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      边框图片
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="min-h-[120px]">
+                <DragDropZone
+                  accept="image/*"
+                  description="点击选择或拖拽图片到此处"
+                  icon="🖼️"
+                  label="选择边框图片"
+                  loading={loading}
+                  onFile={onPickBorder}
+                />
+              </div>
+            )}
             <div className="grid grid-cols-4 gap-2 mt-3">
               <Input
                 label="Top"
@@ -828,6 +1214,31 @@ export default function PreviewPage() {
               </div>
             </div>
           </div>
+
+          {/* 表格图片大小调整 */}
+          {hasTableWithImages && (
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mt-4">
+              <h3 className="text-sm font-medium mb-4 text-gray-900">表格图片大小</h3>
+              <Slider
+                label="图片高度"
+                size="sm"
+                step={10}
+                minValue={80}
+                maxValue={160}
+                value={tableImageSize}
+                onChange={(value) => setTableImageSize(value as number)}
+                className="max-w-full"
+                showTooltip={true}
+                tooltipProps={{
+                  placement: "top",
+                  content: `${tableImageSize}px`
+                }}
+              />
+              <div className="text-xs text-gray-500 mt-2">
+                范围: 80-160px，当前: {tableImageSize}px
+              </div>
+            </div>
+          )}
         </ScrollShadow>
 
         {/* 固定在底部的导出区域 */}
@@ -934,29 +1345,57 @@ export default function PreviewPage() {
           </div>
         </div>
 
-        {/* 横向滚动画布容器 - 使用 Intersection Observer 懒加载 */}
+        {/* 横向和纵向滚动画布容器 - 使用 Intersection Observer 懒加载 */}
         <div
+          className="force-scrollbar-visible"
           style={{
             flex: 1,
             backgroundColor: "#f9fafb",
             overflow: "auto",
             padding: 16,
+            minHeight: 0, // 确保 flex 子元素可以缩小
           }}
         >
-          <div style={{ display: "flex", gap: 16, width: "max-content" }}>
+          <div style={{ display: "flex", gap: 16, width: "max-content", minHeight: "100%" }}>
             {data.pages.map((page, index) => (
               <CanvasCell
                 key={`${currentSheet}-${index}`}
                 estHeight={heights[index] || 1200}
                 page={page}
+                pixelRatio={pixelRatio}
                 style={debouncedStyle}
                 zoomPct={deferredZoom}
+                onDownload={() => onDownloadPage(index)}
+                onTextClick={(info) => handleTextClick(index, info)}
+                onImageClick={(info) => handleImageClick(index, info)}
                 onMeasured={onMeasuredByIndex(index)}
+                tableImageSize={tableImageSize}
               />
             ))}
           </div>
         </div>
       </section>
+
+      {/* 文字编辑弹窗 */}
+      {editingText && (
+        <TextEditModal
+          isOpen={true}
+          onClose={() => setEditingText(null)}
+          onSave={handleTextSave}
+          title={editingText.title}
+          value={editingText.value}
+          multiline={editingText.multiline}
+          large={editingText.large}
+        />
+      )}
+
+      {/* 图片上传弹窗 */}
+      <ImageUploadModal
+        isOpen={!!editingImage}
+        currentImage={editingImage?.currentImage}
+        onClose={() => setEditingImage(null)}
+        onSave={handleImageSave}
+      />
     </div>
   );
 }

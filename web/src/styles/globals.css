@@ -1,3 +1,34 @@
 @import "tailwindcss";
 
-@config "../../tailwind.config.js"
+@config "../../tailwind.config.js";
+/* 强制显示滚动条 - 覆盖 macOS 默认自动隐藏行为 */
+/* Webkit 浏览器（Chrome、Safari、Edge） */
+::-webkit-scrollbar {
+  -webkit-appearance: none;
+}
+
+.force-scrollbar-visible::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.force-scrollbar-visible::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.force-scrollbar-visible::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+  border: 2px solid #f1f5f9;
+}
+
+.force-scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Firefox */
+.force-scrollbar-visible {
+  scrollbar-width: auto;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}

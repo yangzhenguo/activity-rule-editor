@@ -17,13 +17,16 @@ export type TableCell = {
   value: string; // 单元格内容（文字或图片标识）
   is_image: boolean; // 是否为图片
   image?: ImageMeta; // 如果是图片，包含图片元数据
+  rowspan?: number; // 跨行数（默认为 1）
+  colspan?: number; // 跨列数（默认为 1）
+  bold?: boolean; // 是否加粗
+  center?: boolean; // 是否居中
 };
 
 // 表格数据结构
 export type TableData = {
   type: "table";
-  headers: string[]; // 表头（文字）
-  rows: TableCell[][]; // 数据行（每行包含多个单元格）
+  rows: TableCell[][]; // 表格行（每行包含多个单元格），没有表头的概念
 };
 
 export type Section = {
