@@ -71,6 +71,12 @@ export function TableComponent({
   // 追踪图片加载完成数量，用于强制触发高度更新
   const [loadedImageCount, setLoadedImageCount] = useState(0);
 
+  // 当影响高度的属性变化时，清空测量缓存并重置重试计数
+  useEffect(() => {
+    setCellHeights(new Map());
+    retryCountRef.current = 0;
+  }, [fontSize, table, width, fontFamily, maxImageHeight]);
+
   // 加载所有表格中的图片（渐进式加载，带状态追踪）
   useEffect(() => {
     const loadImages = async () => {
@@ -225,61 +231,71 @@ export function TableComponent({
     return { layout, matrix };
   }, [table.rows, colCount]);
 
-  // 测量所有单元格的实际高度（依赖图片加载状态）
+  // 测量所有单元格的实际高度（使用 RAF 确保 Konva 渲染完成）
   useLayoutEffect(() => {
-    const newHeights = new Map<string, number>();
-    let hasChanges = false;
-    let hasUnmeasured = false;
+    let cancelled = false;
 
-    // 测量文本节点
-    textRefs.current.forEach((textNode, key) => {
-      if (textNode) {
-        const height = textNode.height();
+    const measure = () => {
+      if (cancelled) return;
 
-        if (height > 0) {
-          newHeights.set(key, height);
-          if (!cellHeights.has(key) || cellHeights.get(key) !== height) {
-            hasChanges = true;
+      const newHeights = new Map<string, number>();
+      let hasChanges = false;
+      let hasUnmeasured = false;
+
+      // 测量文本节点
+      textRefs.current.forEach((textNode, key) => {
+        if (textNode) {
+          const height = textNode.height();
+
+          if (height > 0) {
+            newHeights.set(key, height);
+            if (!cellHeights.has(key) || cellHeights.get(key) !== height) {
+              hasChanges = true;
+            }
+          } else {
+            // 高度为 0，标记为未完成测量
+            hasUnmeasured = true;
           }
-        } else {
-          // 高度为 0，标记为未完成测量
-          hasUnmeasured = true;
         }
-      }
-    });
+      });
 
-    // 测量图片节点
-    imageRefs.current.forEach((imageNode, key) => {
-      if (imageNode) {
-        const height = imageNode.height();
+      // 测量图片节点
+      imageRefs.current.forEach((imageNode, key) => {
+        if (imageNode) {
+          const height = imageNode.height();
 
-        if (height > 0) {
-          newHeights.set(key, height);
-          if (!cellHeights.has(key) || cellHeights.get(key) !== height) {
-            hasChanges = true;
+          if (height > 0) {
+            newHeights.set(key, height);
+            if (!cellHeights.has(key) || cellHeights.get(key) !== height) {
+              hasChanges = true;
+            }
+          } else {
+            hasUnmeasured = true;
           }
-        } else {
-          hasUnmeasured = true;
         }
+      });
+
+      if (hasChanges) {
+        setCellHeights(newHeights);
+        // 重置重试计数器
+        retryCountRef.current = 0;
       }
-    });
 
-    if (hasChanges) {
-      setCellHeights(newHeights);
-      // 重置重试计数器
-      retryCountRef.current = 0;
-    }
+      // 如果有未测量的节点，且未超过最大重试次数，用 RAF 重试
+      if (hasUnmeasured && retryCountRef.current < maxRetries) {
+        retryCountRef.current++;
+        requestAnimationFrame(measure);
+      }
+    };
 
-    // 如果有未测量的节点，且未超过最大重试次数，则重试
-    if (hasUnmeasured && retryCountRef.current < maxRetries) {
-      retryCountRef.current++;
-      const timer = setTimeout(() => {
-        setCellHeights((prev) => new Map(prev)); // 强制触发重新渲染
-      }, 100);
+    // 等 Konva 真正渲染完这一帧再测量
+    const rafId = requestAnimationFrame(measure);
 
-      return () => clearTimeout(timer);
-    }
-  }, [loadedImageCount]); // 依赖图片加载完成计数
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [loadedImageCount, fontSize, table, width, fontFamily, maxImageHeight]); // 依赖所有影响高度的属性
 
   // 移除了表头高度计算（没有表头概念了）
 
@@ -348,17 +364,17 @@ export function TableComponent({
   }, [onHeightMeasured]);
 
   useLayoutEffect(() => {
-    if (onHeightMeasuredRef.current && totalHeight > 0) {
-      // 使用 requestAnimationFrame 确保DOM已经更新完成
-      const rafId = requestAnimationFrame(() => {
-        if (onHeightMeasuredRef.current) {
-          onHeightMeasuredRef.current(totalHeight);
-        }
-      });
+    if (!onHeightMeasuredRef.current || totalHeight <= 0) return;
 
-      return () => cancelAnimationFrame(rafId);
-    }
-  }, [totalHeight, loadedImageCount]); // 依赖图片加载完成计数，确保每次加载都触发
+    // 使用 requestAnimationFrame 确保DOM已经更新完成
+    const rafId = requestAnimationFrame(() => {
+      if (onHeightMeasuredRef.current) {
+        onHeightMeasuredRef.current(totalHeight);
+      }
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [totalHeight]); // 只依赖最终高度，中间变量的变化会自然反映在 totalHeight 上
 
   return (
     <Group x={x} y={y}>

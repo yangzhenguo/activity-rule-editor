@@ -472,29 +472,36 @@ export function PageCanvas({
 
   // 测量所有文本的实际渲染高度
   useLayoutEffect(() => {
-    const newHeights = new Map<string, number>();
     let hasChanges = false;
+    const updates: Array<{ key: string; height: number }> = [];
 
     textRefs.current.forEach((textNode, key) => {
       if (textNode) {
         const height = textNode.height();
 
         if (height > 0) {
-          newHeights.set(key, height);
           if (
             !measuredHeights.has(key) ||
             measuredHeights.get(key) !== height
           ) {
             hasChanges = true;
+            updates.push({ key, height });
           }
         }
       }
     });
 
+    // 合并更新，而不是完全替换，保留表格、奖励等其他组件的高度
     if (hasChanges) {
-      setMeasuredHeights(newHeights);
+      setMeasuredHeights((prev) => {
+        const newMap = new Map(prev);
+        for (const { key, height } of updates) {
+          newMap.set(key, height);
+        }
+        return newMap;
+      });
     }
-  });
+  }, [normalizedPage, style.font.size, style.font.lineHeight, style.pageWidth]); // 依赖所有影响文本高度的属性
 
   // 确保所有数值有效，防止 NaN
   const contentX = isFinite(PAD.l) ? PAD.l : 0;

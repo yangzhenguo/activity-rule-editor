@@ -118,10 +118,57 @@ const CanvasCell = memo(
   }) {
     // 固定基准尺寸
     const baseWidth = style.pageWidth;
-    const baseHeight = estHeight;
+    const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
+    
+    // Stage 高度 = max(估算高度, 实测高度)，不需要安全边距
+    const baseHeight = Math.max(estHeight, measuredHeight ?? 0);
     const scale = zoomPct / 100;
     const scaledW = Math.round(baseWidth * scale);
-    const scaledH = Math.round(baseHeight * scale);
+    
+    // 动画高度：用于平滑过渡
+    const [animatedScaledH, setAnimatedScaledH] = useState<number>(
+      Math.round(baseHeight * scale)
+    );
+    const targetScaledH = Math.round(baseHeight * scale);
+    
+    // 内部测量回调，用于更新实测高度
+    const handleMeasured = useCallback((h: number) => {
+      setMeasuredHeight(h);
+      onMeasured(h); // 同时通知父组件
+    }, [onMeasured]);
+    
+    // 高度变化动画
+    useEffect(() => {
+      const startH = animatedScaledH;
+      const endH = targetScaledH;
+      const diff = endH - startH;
+      
+      // 如果高度变化小于 5px，直接设置，不需要动画
+      if (Math.abs(diff) < 5) {
+        setAnimatedScaledH(endH);
+        return;
+      }
+      
+      const duration = 400; // 动画时长 400ms
+      const startTime = performance.now();
+      
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // 使用 easeOutCubic 缓动函数
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const currentH = startH + diff * eased;
+        
+        setAnimatedScaledH(Math.round(currentH));
+        
+        if (progress < 1) {
+          requestAnimationFrame(animate);
+        }
+      };
+      
+      requestAnimationFrame(animate);
+    }, [targetScaledH]); // 依赖目标高度
 
     // 使用 Intersection Observer 检测可见性
     const containerRef = useRef<HTMLDivElement>(null);
@@ -155,7 +202,7 @@ const CanvasCell = memo(
         ref={containerRef}
         style={{
           width: scaledW,
-          height: scaledH,
+          height: animatedScaledH,
           display: "inline-block",
           paddingRight: 16,
         }}
@@ -169,7 +216,7 @@ const CanvasCell = memo(
           style={{
             position: "relative",
             width: scaledW,
-            height: scaledH,
+            height: animatedScaledH,
             background: "#fff",
             borderRadius: 8,
             boxShadow: "0 1px 3px rgba(0,0,0,.1)",
@@ -203,7 +250,7 @@ const CanvasCell = memo(
                   style={style}
                   tableImageSize={tableImageSize}
                   onImageClick={onImageClick}
-                  onMeasured={onMeasured}
+                  onMeasured={handleMeasured}
                   onTextClick={(info) => onTextClick(info)}
                 />
               </Layer>
@@ -312,7 +359,14 @@ export default function PreviewPage() {
   const [pixelRatio, setPixelRatio] = useState(1);
   const [zoomPct, setZoomPct] = useState(50);
   const deferredZoom = useDeferredValue(zoomPct); // 延迟缩放变化
-  const [loading, setLoading] = useState(false);
+  
+  // 分离各个组件的加载状态
+  const [loadingData, setLoadingData] = useState(false);
+  const [loadingBorder, setLoadingBorder] = useState(false);
+  const [loadingBlockTitleBg, setLoadingBlockTitleBg] = useState(false);
+  const [loadingSectionTitleBg, setLoadingSectionTitleBg] = useState(false);
+  const [loadingExport, setLoadingExport] = useState(false); // 导出加载状态
+  
   const [error, setError] = useState<string | null>(null);
   const [heights, setHeights] = useState<number[]>([]);
   const [tableImageSize, setTableImageSize] = useState(120); // 表格图片大小
@@ -385,7 +439,7 @@ export default function PreviewPage() {
   }, [style]);
 
   const onPickJson = useCallback(async (file: File) => {
-    setLoading(true);
+    setLoadingData(true);
     setError(null);
     try {
       const text = await file.text();
@@ -399,12 +453,12 @@ export default function PreviewPage() {
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
-      setLoading(false);
+      setLoadingData(false);
     }
   }, []);
 
   const onPickXlsx = useCallback(async (file: File) => {
-    setLoading(true);
+    setLoadingData(true);
     setError(null);
     try {
       const fd = new FormData();
@@ -465,7 +519,7 @@ export default function PreviewPage() {
     } catch (e: any) {
       setError(e?.message ?? String(e));
     } finally {
-      setLoading(false);
+      setLoadingData(false);
     }
   }, []);
 
@@ -489,6 +543,7 @@ export default function PreviewPage() {
   );
 
   const onPickBorder = useCallback(async (file: File) => {
+    setLoadingBorder(true);
     const blobUrl = URL.createObjectURL(file);
 
     try {
@@ -504,6 +559,7 @@ export default function PreviewPage() {
       setStyle((s) => ({ ...s, border: { ...s.border, image: d } }));
       setUploadedBorderFile(file.name);
     } finally {
+      setLoadingBorder(false);
       URL.revokeObjectURL(blobUrl);
     }
   }, []);
@@ -526,6 +582,7 @@ export default function PreviewPage() {
 
   // 上传大标题背景
   const onPickBlockTitleBg = useCallback(async (file: File) => {
+    setLoadingBlockTitleBg(true);
     const blobUrl = URL.createObjectURL(file);
 
     try {
@@ -541,6 +598,7 @@ export default function PreviewPage() {
       setStyle((s) => ({ ...s, blockTitleBg: d }));
       setUploadedBlockTitleBg(file.name);
     } finally {
+      setLoadingBlockTitleBg(false);
       URL.revokeObjectURL(blobUrl);
     }
   }, []);
@@ -553,6 +611,7 @@ export default function PreviewPage() {
 
   // 上传小标题背景
   const onPickSectionTitleBg = useCallback(async (file: File) => {
+    setLoadingSectionTitleBg(true);
     const blobUrl = URL.createObjectURL(file);
 
     try {
@@ -568,6 +627,7 @@ export default function PreviewPage() {
       setStyle((s) => ({ ...s, sectionTitleBg: d }));
       setUploadedSectionTitleBg(file.name);
     } finally {
+      setLoadingSectionTitleBg(false);
       URL.revokeObjectURL(blobUrl);
     }
   }, []);
@@ -645,6 +705,34 @@ export default function PreviewPage() {
     });
   }, []);
 
+  // 通用路径设置函数：处理所有边界情况
+  const setValueByPath = useCallback((root: any, path: string, value: any) => {
+    const parts = path.split(".");
+    let current = root;
+    
+    // 遍历到倒数第二个部分
+    for (let i = 0; i < parts.length - 1; i++) {
+      const part = parts[i];
+      
+      if (/^\d+$/.test(part)) {
+        // 当前部分是数字，作为数组索引
+        current = current[Number(part)];
+      } else {
+        current = current[part];
+      }
+    }
+    
+    // 处理最后一个部分
+    const lastPart = parts[parts.length - 1];
+    if (/^\d+$/.test(lastPart) && Array.isArray(current)) {
+      // 最后一部分是数字且父级是数组
+      current[Number(lastPart)] = value;
+    } else {
+      // 最后一部分是普通属性
+      current[lastPart] = value;
+    }
+  }, []);
+
   // 保存文字编辑
   const handleTextSave = useCallback(
     (newValue: string) => {
@@ -652,73 +740,120 @@ export default function PreviewPage() {
 
       const newData = JSON.parse(JSON.stringify(data));
       const page = newData.pages[editingText.pageIndex];
-
-      // 解析路径：sections.0.title 或 sections.0.rewards.1.name
       const pathParts = editingText.path.split(".");
 
-      // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
-      if (page.blocks && pathParts[0] === "sections") {
-        const sectionIdx = Number(pathParts[1]);
+      // ===== 特殊处理 1: _blockTitle 映射到 blocks[x].block_title =====
+      if (editingText.path.includes("._blockTitle")) {
+        if (page.blocks && pathParts[0] === "sections") {
+          const sectionIdx = Number(pathParts[1]);
+          
+          // 找到这个 section 属于哪个 block
+          let currentSectionCount = 0;
+          for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+            const block = page.blocks[blockIdx];
+            const sectionsInBlock = block.sections.length;
 
-        // 找到这个 section 属于哪个 block
-        let currentSectionCount = 0;
-
-        for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
-          const block = page.blocks[blockIdx];
-          const sectionsInBlock = block.sections.length;
-
-          if (currentSectionCount + sectionsInBlock > sectionIdx) {
-            // 找到了对应的 block
-            const sectionInBlockIdx = sectionIdx - currentSectionCount;
-
-            // 构建新路径
-            let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
-
-            // 处理剩余路径 (title, content, rewards.X.name等)
-            for (let i = 2; i < pathParts.length - 1; i++) {
-              const key = pathParts[i];
-
-              if (!isNaN(Number(pathParts[i + 1]))) {
-                target = target[key][Number(pathParts[++i])];
-              } else {
-                target = target[key];
-              }
+            if (currentSectionCount + sectionsInBlock > sectionIdx) {
+              // 找到了对应的 block，更新 block_title
+              page.blocks[blockIdx].block_title = newValue;
+              break;
             }
-
-            target[pathParts[pathParts.length - 1]] = newValue;
-            break;
-          }
-
-          currentSectionCount += sectionsInBlock;
-        }
-      } else {
-        // 旧结构或直接 sections，直接更新
-        let target: any = page;
-
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          const key = pathParts[i];
-
-          if (!isNaN(Number(pathParts[i + 1]))) {
-            target = target[key][Number(pathParts[++i])];
-          } else {
-            target = target[key];
+            currentSectionCount += sectionsInBlock;
           }
         }
-        target[pathParts[pathParts.length - 1]] = newValue;
+      }
+      // ===== 特殊处理 2: paragraphs 需要保持 { align, runs } 结构 =====
+      else if (editingText.path.includes(".paragraphs.")) {
+        const sectionIdx = Number(pathParts[pathParts.indexOf("sections") + 1]);
+        const paraIdx = Number(pathParts[pathParts.indexOf("paragraphs") + 1]);
+
+        if (page.blocks && pathParts[0] === "sections") {
+          // 映射到 blocks 结构
+          let currentSectionCount = 0;
+          for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+            const block = page.blocks[blockIdx];
+            const sectionsInBlock = block.sections.length;
+
+            if (currentSectionCount + sectionsInBlock > sectionIdx) {
+              const sectionInBlockIdx = sectionIdx - currentSectionCount;
+              const paragraph = block.sections[sectionInBlockIdx].paragraphs[paraIdx];
+              
+              // 保留原有结构，只更新文字
+              const firstRun = paragraph?.runs?.[0] ?? {};
+              block.sections[sectionInBlockIdx].paragraphs[paraIdx] = {
+                align: paragraph?.align || "left",
+                runs: [
+                  {
+                    ...firstRun,
+                    text: newValue,
+                  },
+                ],
+              };
+              break;
+            }
+            currentSectionCount += sectionsInBlock;
+          }
+        } else {
+          // 旧结构：直接在 sections 上操作
+          const paragraph = page.sections[sectionIdx].paragraphs[paraIdx];
+          const firstRun = paragraph?.runs?.[0] ?? {};
+          page.sections[sectionIdx].paragraphs[paraIdx] = {
+            align: paragraph?.align || "left",
+            runs: [
+              {
+                ...firstRun,
+                text: newValue,
+              },
+            ],
+          };
+        }
+      }
+      // ===== 通用处理：其他所有字段（title, content, rewards.X.name 等） =====
+      else {
+        if (page.blocks && pathParts[0] === "sections") {
+          const sectionIdx = Number(pathParts[1]);
+
+          // 找到这个 section 属于哪个 block
+          let currentSectionCount = 0;
+          for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
+            const block = page.blocks[blockIdx];
+            const sectionsInBlock = block.sections.length;
+
+            if (currentSectionCount + sectionsInBlock > sectionIdx) {
+              // 找到了对应的 block
+              const sectionInBlockIdx = sectionIdx - currentSectionCount;
+
+              // 构建相对路径（从 section 开始）
+              const relativeParts = pathParts.slice(2); // 跳过 "sections" 和索引
+              const relativePath = relativeParts.join(".");
+              
+              // 在对应的 section 上设置值
+              setValueByPath(
+                block.sections[sectionInBlockIdx],
+                relativePath,
+                newValue
+              );
+              break;
+            }
+            currentSectionCount += sectionsInBlock;
+          }
+        } else {
+          // 旧结构或直接 sections，直接使用完整路径
+          setValueByPath(page, editingText.path, newValue);
+        }
       }
 
       setData(newData);
 
       // 同步到 allSheets
       const newSheets = new Map(allSheets);
-
       newSheets.set(currentSheet, newData);
       setAllSheets(newSheets);
 
       setEditingText(null);
       console.log("✓ 文字已保存:", newValue);
     },
-    [editingText, data, allSheets, currentSheet],
+    [editingText, data, allSheets, currentSheet, setValueByPath],
   );
 
   // 保存图片替换
@@ -728,17 +863,14 @@ export default function PreviewPage() {
 
       const newData = JSON.parse(JSON.stringify(data));
       const page = newData.pages[editingImage.pageIndex];
-
-      // 解析路径：sections.0.rewards.1.image
       const pathParts = editingImage.path.split(".");
 
-      // 如果页面有 blocks 结构但路径是 sections.X，需要映射回原始 blocks
+      // 使用通用的路径设置函数
       if (page.blocks && pathParts[0] === "sections") {
         const sectionIdx = Number(pathParts[1]);
 
         // 找到这个 section 属于哪个 block
         let currentSectionCount = 0;
-
         for (let blockIdx = 0; blockIdx < page.blocks.length; blockIdx++) {
           const block = page.blocks[blockIdx];
           const sectionsInBlock = block.sections.length;
@@ -747,54 +879,36 @@ export default function PreviewPage() {
             // 找到了对应的 block
             const sectionInBlockIdx = sectionIdx - currentSectionCount;
 
-            // 构建新路径
-            let target: any = page.blocks[blockIdx].sections[sectionInBlockIdx];
-
-            // 处理剩余路径 (rewards.X.image)
-            for (let i = 2; i < pathParts.length - 1; i++) {
-              const key = pathParts[i];
-
-              if (!isNaN(Number(pathParts[i + 1]))) {
-                target = target[key][Number(pathParts[++i])];
-              } else {
-                target = target[key];
-              }
-            }
-
-            target[pathParts[pathParts.length - 1]] = imageDataUrl;
+            // 构建相对路径（从 section 开始）
+            const relativeParts = pathParts.slice(2); // 跳过 "sections" 和索引
+            const relativePath = relativeParts.join(".");
+            
+            // 在对应的 section 上设置值
+            setValueByPath(
+              block.sections[sectionInBlockIdx],
+              relativePath,
+              imageDataUrl
+            );
             break;
           }
-
           currentSectionCount += sectionsInBlock;
         }
       } else {
-        // 旧结构或直接 sections，直接更新
-        let target: any = page;
-
-        for (let i = 0; i < pathParts.length - 1; i++) {
-          const key = pathParts[i];
-
-          if (!isNaN(Number(pathParts[i + 1]))) {
-            target = target[key][Number(pathParts[++i])];
-          } else {
-            target = target[key];
-          }
-        }
-        target[pathParts[pathParts.length - 1]] = imageDataUrl;
+        // 旧结构或直接 sections，直接使用完整路径
+        setValueByPath(page, editingImage.path, imageDataUrl);
       }
 
       setData(newData);
 
       // 同步到 allSheets
       const newSheets = new Map(allSheets);
-
       newSheets.set(currentSheet, newData);
       setAllSheets(newSheets);
 
       setEditingImage(null);
       console.log("✓ 图片已保存");
     },
-    [editingImage, data, allSheets, currentSheet],
+    [editingImage, data, allSheets, currentSheet, setValueByPath],
   );
 
   // 处理单个图片下载
@@ -831,10 +945,12 @@ export default function PreviewPage() {
     ) => {
       try {
         const page = data.pages[pageIndex];
+        const knownHeight = heights[pageIndex]; // 使用已测量的高度
         const dataUrl = await renderPageToDataURL(
           page,
           debouncedStyle,
           pixelRatio,
+          knownHeight,
         );
 
         // 使用 page.region 作为文件名
@@ -924,7 +1040,7 @@ export default function PreviewPage() {
         alert(`下载失败: ${e?.message ?? String(e)}`);
       }
     },
-    [data, debouncedStyle, pixelRatio, processImageDownload, currentSessionId],
+    [data, debouncedStyle, pixelRatio, processImageDownload, currentSessionId, heights],
   );
 
   // 从下载历史下载
@@ -947,7 +1063,7 @@ export default function PreviewPage() {
   }, []);
 
   const onExport = useCallback(async () => {
-    setLoading(true);
+    setLoadingExport(true);
     setExportPhase("render");
     setRenderCurr(0);
     setZipPercent(0);
@@ -975,10 +1091,15 @@ export default function PreviewPage() {
 
       // 遍历所有 sheet，分别渲染
       for (const [sheetName, sheetData] of allSheets) {
+        // 如果是当前 sheet，使用已测量的高度
+        const isCurrentSheet = sheetName === currentSheet;
+        const sheetHeights = isCurrentSheet ? heights : undefined;
+        
         const items = await exportPagesToPng(
           sheetData,
           debouncedStyle,
           pixelRatio,
+          sheetHeights,
           (progress: ExportProgress) => {
             if (progress.phase === "render") {
               setRenderCurr(currentPage + progress.current);
@@ -1021,7 +1142,7 @@ export default function PreviewPage() {
     } catch (e: any) {
       alert(e?.message ?? String(e));
     } finally {
-      setLoading(false);
+      setLoadingExport(false);
       // 延迟清空状态，让用户看到"已完成"提示
       setTimeout(() => {
         setExportPhase(null);
@@ -1031,7 +1152,7 @@ export default function PreviewPage() {
         setWritePercent(0);
       }, 1500);
     }
-  }, [allSheets, debouncedStyle, pixelRatio]);
+  }, [allSheets, debouncedStyle, pixelRatio, heights, currentSheet]);
 
   // 当页数变化时，使用结构化估高初始化高度数组
   useEffect(() => {
@@ -1063,8 +1184,8 @@ export default function PreviewPage() {
 
       const prev = heightsRef.current[idx];
 
-      // 变化小于 5px 视为相同，避免抖动
-      if (prev != null && Math.abs(prev - h) < 5) return;
+      // 变化小于 2px 视为相同，避免抖动（降低阈值以提高精度）
+      if (prev != null && Math.abs(prev - h) < 2) return;
 
       // 立即更新 ref，确保即使 RAF 被取消也不丢失数据
       // 这解决了快速滚动时页面卸载导致高度更新丢失的问题
@@ -1177,7 +1298,7 @@ export default function PreviewPage() {
                   description="点击选择或拖拽文件到此处"
                   icon="📁"
                   label="选择 JSON 或 XLSX 文件"
-                  loading={loading}
+                  loading={loadingData}
                   onFile={onPickDataFile}
                 />
               </div>
@@ -1229,7 +1350,7 @@ export default function PreviewPage() {
                   description="点击选择或拖拽图片到此处"
                   icon="🖼️"
                   label="选择边框图片"
-                  loading={loading}
+                  loading={loadingBorder}
                   onFile={onPickBorder}
                 />
               </div>
@@ -1339,7 +1460,7 @@ export default function PreviewPage() {
                   description="点击选择或拖拽图片到此处"
                   icon="🎨"
                   label="选择大标题背景"
-                  loading={loading}
+                  loading={loadingBlockTitleBg}
                   onFile={onPickBlockTitleBg}
                 />
               </div>
@@ -1387,7 +1508,7 @@ export default function PreviewPage() {
                   description="点击选择或拖拽图片到此处"
                   icon="🎨"
                   label="选择小标题背景"
-                  loading={loading}
+                  loading={loadingSectionTitleBg}
                   onFile={onPickSectionTitleBg}
                 />
               </div>
@@ -1596,7 +1717,7 @@ export default function PreviewPage() {
             <Button
               className="flex-1"
               color="primary"
-              isDisabled={loading || allSheets.size === 0}
+              isDisabled={loadingExport || allSheets.size === 0}
               startContent={
                 exportPhase ? (
                   <Spinner color="current" size="sm" variant="wave" />
@@ -1618,7 +1739,7 @@ export default function PreviewPage() {
             </Button>
             <Dropdown>
               <DropdownTrigger>
-                <Button isDisabled={loading} size="md" variant="flat">
+                <Button isDisabled={loadingExport} size="md" variant="flat">
                   {pixelRatio}x
                 </Button>
               </DropdownTrigger>

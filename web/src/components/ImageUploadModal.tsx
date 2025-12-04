@@ -7,6 +7,7 @@ import {
   ModalFooter,
   Button,
 } from "@heroui/react";
+import { normalizeImageUrl } from "@/renderer/canvas/useImageCache";
 
 interface ImageUploadModalProps {
   isOpen: boolean;
@@ -26,10 +27,12 @@ export function ImageUploadModal({
   );
   const [isDragging, setIsDragging] = useState(false);
 
-  // 当 Modal 打开时，同步 currentImage 到 previewImage
+  // 当 Modal 打开时，同步 currentImage 到 previewImage（规范化 URL）
   useEffect(() => {
     if (isOpen) {
-      setPreviewImage(currentImage || null);
+      // 规范化 URL：将相对路径转换为完整 API 地址
+      const normalized = currentImage ? normalizeImageUrl(currentImage) : null;
+      setPreviewImage(normalized);
     }
   }, [isOpen, currentImage]);
 
@@ -94,7 +97,9 @@ export function ImageUploadModal({
   }, [previewImage, onSave, onClose]);
 
   const handleCancel = useCallback(() => {
-    setPreviewImage(currentImage || null);
+    // 规范化 URL
+    const normalized = currentImage ? normalizeImageUrl(currentImage) : null;
+    setPreviewImage(normalized);
     onClose();
   }, [currentImage, onClose]);
 

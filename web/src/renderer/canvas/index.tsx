@@ -1,7 +1,7 @@
 import type { Data, StyleCfg, Page } from "./types";
 import type { ExportProgress } from "@/types";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import { Stage, Layer } from "react-konva";
 
@@ -11,18 +11,28 @@ function OffscreenExporter({
   page,
   style,
   pixelRatio,
+  knownHeight,
   onDone,
 }: {
   page: Page;
   style: StyleCfg;
   pixelRatio: number;
+  knownHeight?: number;
   onDone: (dataUrl: string) => void;
 }) {
   const stageRef = useRef<any>(null);
-  const [h, setH] = useState(2400);
+  const [h, setH] = useState(knownHeight || 2400);
+  const [measured, setMeasured] = useState(!!knownHeight); // 如果有已知高度，标记为已测量
+
+  const handleMeasured = useCallback((measuredH: number) => {
+    setH(measuredH);
+    setMeasured(true); // 标记测量完成
+  }, []);
 
   useEffect(() => {
-    // 等待几帧确保所有内容都已渲染完成，然后直接导出
+    if (!measured) return; // 等待测量完成
+
+    // 等待几帧确保所有内容都已渲染完成，然后导出
     const id = requestAnimationFrame(() =>
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
@@ -39,12 +49,17 @@ function OffscreenExporter({
     );
 
     return () => cancelAnimationFrame(id);
-  }, []); // 空依赖，只执行一次
+  }, [measured, pixelRatio, onDone]); // 依赖 measured
 
   return (
     <Stage ref={stageRef} height={h} width={style.pageWidth}>
       <Layer>
-        <PageCanvas forExport page={page} style={style} onMeasured={setH} />
+        <PageCanvas 
+          forExport 
+          page={page} 
+          style={style} 
+          onMeasured={knownHeight ? undefined : handleMeasured}
+        />
       </Layer>
     </Stage>
   );
@@ -54,6 +69,7 @@ export async function renderPageToDataURL(
   page: Page,
   style: StyleCfg,
   pixelRatio = 2,
+  knownHeight?: number,
 ): Promise<string> {
   const container = document.createElement("div");
   const root = ReactDOM.createRoot(container);
@@ -66,6 +82,7 @@ export async function renderPageToDataURL(
         page={page}
         pixelRatio={pixelRatio}
         style={style}
+        knownHeight={knownHeight}
         onDone={handleDone}
       />,
     );
@@ -80,6 +97,7 @@ export async function exportPagesToPng(
   data: Data,
   style: StyleCfg,
   pixelRatio = 2,
+  knownHeights?: number[],
   onProgress?: (progress: ExportProgress) => void,
 ) {
   const out: Array<{ name: string; dataUrl: string }> = [];
@@ -87,7 +105,8 @@ export async function exportPagesToPng(
 
   for (let i = 0; i < total; i++) {
     const page = data.pages[i];
-    const dataUrl = await renderPageToDataURL(page, style, pixelRatio);
+    const knownHeight = knownHeights?.[i];
+    const dataUrl = await renderPageToDataURL(page, style, pixelRatio, knownHeight);
 
     // 使用 page.region 作为文件名，与单张下载保持一致
     const regionName = page.region || `page-${i + 1}`;
