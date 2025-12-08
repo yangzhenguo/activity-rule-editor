@@ -59,7 +59,7 @@ function getApiBase(): string {
  * - 保留 data: URL 和 blob: URL
  * - 保留已完整的 http(s): URL
  */
-function normalizeImageUrl(url: string): string {
+export function normalizeImageUrl(url: string): string {
   if (!url) return url;
 
   // 保留 data: 和 blob: URL
