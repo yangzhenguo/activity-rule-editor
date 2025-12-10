@@ -56,17 +56,13 @@ export function TableEditModal({
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
       const newTable = { ...editedTable };
-      
+
       // 更新图片为 data URL
-      if (typeof newTable.rows[rowIdx][cellIdx].image === "string") {
-        newTable.rows[rowIdx][cellIdx].image = dataUrl;
-      } else {
-        newTable.rows[rowIdx][cellIdx].image = {
-          url: dataUrl,
-          id: `local-${Date.now()}`,
-        };
-      }
-      
+      newTable.rows[rowIdx][cellIdx].image = {
+        url: dataUrl,
+        id: `local-${Date.now()}`,
+      };
+
       setEditedTable(newTable);
     };
     reader.readAsDataURL(file);
